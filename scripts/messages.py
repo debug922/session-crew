@@ -39,7 +39,7 @@ CTX = {
 
 
 def user(lang, key, **kw):
-    return USER.get(lang, USER["it"])[key].format(**kw)
+    return USER.get(lang, USER["en"])[key].format(**kw)
 
 
 def ctx(key, **kw):

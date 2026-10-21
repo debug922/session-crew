@@ -4,7 +4,7 @@ import json
 import os
 import re
 
-DEFAULTS = {"lang": "it", "warn_mb": 400, "tell_user_mb": 800}
+DEFAULTS = {"lang": "en", "warn_mb": 400, "tell_user_mb": 800}
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 
@@ -64,5 +64,5 @@ def load_project(cwd):
     except (OSError, ValueError):
         pass
     if cfg.get("lang") not in ("it", "en"):
-        cfg["lang"] = "it"
+        cfg["lang"] = "en"
     return cfg

@@ -19,6 +19,7 @@ def hook(case, mb, prompt="hello", sid="s1"):
 class AttendedTable(CrewCase):
     def setUp(self):
         super().setUp()
+        self.project()  # Italian, as the messages below
         self.session(100, "s1", "alpha")
 
     def test_below_warn_nothing(self):
@@ -52,6 +53,10 @@ class AttendedTable(CrewCase):
         self.project(lang="en")
         _, _, msg = hook(self, 850)
         self.assertEqual(msg, "This session weighs 850 MB: /handoff, /clear, /migrate.")
+
+    def test_default_language_is_english(self):
+        os.remove(os.path.join(self.crew_home, "-work-proj", "project.json"))
+        self.assertEqual(hook(self, 850)[2], "This session weighs 850 MB: /handoff, /clear, /migrate.")
 
     def test_missing_transcript_is_zero(self):
         rc, out, _ = self.call(size.hook, {"session_id": "s1", "cwd": CWD,

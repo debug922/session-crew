@@ -31,6 +31,7 @@ class CrewCase(unittest.TestCase):
         self.addCleanup(patch.stop)
 
     def project(self, **cfg):
+        cfg.setdefault("lang", "it")  # the tests read Italian; the default itself is tested apart
         folder = os.path.join(self.crew_home, SLUG)
         os.makedirs(folder, exist_ok=True)
         with open(os.path.join(folder, "project.json"), "w") as f:

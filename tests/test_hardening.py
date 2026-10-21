@@ -145,6 +145,7 @@ class SizeAndStartSubprocess(Procs):
         self.assertIn("/handoff", out["hookSpecificOutput"]["additionalContext"])
 
     def test_start_hook_by_stdin(self):
+        self.project()
         self.session(100, "s2", "alpha")
         self.pending("alpha")
         rc, out, _ = run_hook("start", {"session_id": "s2", "cwd": CWD, "source": "clear"})
@@ -259,11 +260,11 @@ class RecoverBudgets(CrewCase):
 
 class Slug(CrewCase):
     def test_every_non_alphanumeric_becomes_a_dash(self):
-        cwd = "/Users/x y/my_proj.v2"
-        self.assertEqual(config.slug(cwd), "-Users-x-y-my-proj-v2")
+        cwd = "/home/x y/my_proj.v2"
+        self.assertEqual(config.slug(cwd), "-home-x-y-my-proj-v2")
 
     def test_transcripts_found_under_the_slug(self):
-        cwd = "/Users/x y/my_proj.v2"
+        cwd = "/home/x y/my_proj.v2"
         folder = os.path.join(self.claude, "projects", config.slug(cwd))
         os.makedirs(folder)
         with open(os.path.join(folder, "old00000.jsonl"), "w") as f:

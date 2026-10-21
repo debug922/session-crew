@@ -128,6 +128,10 @@ class Migrate(CrewCase):
 
 
 class StartHook(CrewCase):
+    def setUp(self):
+        super().setUp()
+        self.project()  # Italian, as the messages below
+
     def event(self, source, sid="new1", name="alpha"):
         self.session(100, sid, name) if name else None
         return {"session_id": sid, "cwd": CWD, "source": source}
