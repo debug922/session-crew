@@ -1,6 +1,9 @@
 {
   "name": "session-crew",
-  "owner": {"name": "Giovanni Sortino"},
+  "owner": {
+    "name": "Giovanni Sortino"
+  },
+  "description": "Workflow for running a project with a crew of long-lived Claude Code sessions: named roles, handoffs to fresh conversations, nights that run unattended.",
   "plugins": [
     {
       "name": "session-crew",
