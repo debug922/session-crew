@@ -1,5 +1,18 @@
 {
   "name": "session-crew",
   "version": "0.1.0",
-  "description": "Hand a long-lived Claude Code session over to a fresh conversation: size warnings, /handoff and /migrate."
+  "description": "Hand a long-lived Claude Code session over to a fresh conversation: size warnings, /handoff and /migrate.",
+  "author": {
+    "name": "Giovanni Sortino"
+  },
+  "homepage": "https://github.com/debug922/session-crew",
+  "repository": "https://github.com/debug922/session-crew",
+  "license": "MIT",
+  "keywords": [
+    "handoff",
+    "session",
+    "transcript",
+    "context",
+    "claude-code"
+  ]
 }
