@@ -189,7 +189,7 @@ maintainer *"Passaggio in attesa per <name>: scrivi /migrate."* (or `/migrate <n
 ## 8. The skills
 
 - `skills/handoff/SKILL.md`: what goes in each section, the user's words quoted, nothing copied from
-  memory; for a kcalloc session also its report; then
+  memory; what the project's own guidelines ask for at a handoff; then
   `crew.py handoff save`; then tell the maintainer `/clear`, `/migrate`.
 - `skills/migrate/SKILL.md`: `disable-model-invocation: true`, `argument-hint: [name]`; runs
   `crew.py migrate $ARGUMENTS`; summarises in at most ten lines: who the session is, the item under

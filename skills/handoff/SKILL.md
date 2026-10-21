@@ -17,8 +17,8 @@ Write the handover of this session, then tell the maintainer how to resume it.
    - `## What remains`: the next steps, in order, with the first one stated so a fresh session can
      start on it.
    - `## Where things are`: branches, unpushed commits, worktrees, run folders, files in progress.
-   Never copy the memory: point to the file that holds a fact. In a kcalloc session also add the
-   report that `guidelines/agents.md` section 9 asks for.
+   Never copy the memory: point to the file that holds a fact. If the project's own guidelines
+   ask for more at a handoff (a report, a log), write that too.
 3. Save it by piping the body to the script (add `--name NAME --cwd DIR` when running under
    Copilot, which has no session registry):
 
