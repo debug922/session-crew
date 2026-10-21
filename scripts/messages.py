@@ -28,6 +28,11 @@ CTX = {
     "busy": "The session called {name} (pid {pid}) is busy or waiting, so the name was not moved "
             "to this one. The maintainer closes the old session or waits, then types "
             "/migrate {name} again.",
+    "pending": "A handoff for this session is already written; the maintainer will /clear and "
+               "/migrate. Finish the turn and start no new item.",
+    "unverified": "The session called {name} (pid {pid}) could not be verified as still running "
+                  "(its registry file has no procStart), so the name was not moved to this one. "
+                  "The maintainer closes it, then types /migrate {name} again.",
     "stuck": "The session called {name} (pid {pid}) did not stop after SIGTERM, so the name was "
              "not moved to this one. The maintainer closes it, then types /migrate {name} again.",
 }

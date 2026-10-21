@@ -76,7 +76,10 @@ def save(ident, body):
     path = os.path.join(folder, "%s-%s.md" % (stamp.strftime("%Y%m%dT%H%M%SZ"), ident.sid8))
     meta = {"status": "pending", "name": ident.handoff_name, "cwd": ident.cwd,
             "session_id": ident.session_id or "", "written_at": stamp.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    earlier = pending(ident.cwd, ident.handoff_name)
     _write(path, meta, body if body.endswith("\n") else body + "\n")
+    for old, _ in earlier:
+        _supersede(old, os.path.basename(path))
     return path
 
 
@@ -105,6 +108,13 @@ def mark_used(path, used_by):
     meta["status"] = "used"
     meta["used_at"] = now().strftime("%Y-%m-%dT%H:%M:%SZ")
     meta["used_by"] = used_by or ""
+    _write(path, meta, body)
+
+
+def _supersede(path, new_name):
+    meta, body = parse(path)
+    meta["status"] = "superseded"
+    meta["superseded_by"] = new_name
     _write(path, meta, body)
 
 

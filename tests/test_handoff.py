@@ -64,6 +64,26 @@ class Save(CrewCase):
         self.assertIn("-o-p/beta/", r.stdout)
 
 
+class Supersede(CrewCase):
+    def test_new_save_supersedes_earlier_ones_of_the_same_name_only(self):
+        old1 = self.pending("alpha", sid="11111111")
+        old2 = self.pending("alpha", sid="22222222")
+        other = self.pending("beta", sid="33333333")
+        new = self.pending("alpha", sid="44444444")
+        meta, _ = handoff.parse(old2)
+        self.assertEqual((meta["status"], meta["superseded_by"]),
+                         ("superseded", os.path.basename(new)))
+        self.assertEqual(handoff.parse(old1)[0]["status"], "superseded")
+        self.assertEqual(handoff.parse(other)[0]["status"], "pending")
+        self.assertEqual([p for p, _ in handoff.pending(CWD, "alpha")], [new])
+
+    def test_refused_save_supersedes_nothing(self):
+        old = self.pending("alpha")
+        with self.assertRaises(ValueError):
+            handoff.save(registry.Identity("alpha", "55555555", CWD), "## What remains\n")
+        self.assertEqual(handoff.parse(old)[0]["status"], "pending")
+
+
 class Migrate(CrewCase):
     def ident(self, name="alpha", sid="newsess00"):
         return registry.Identity(name, sid, CWD)
@@ -86,10 +106,9 @@ class Migrate(CrewCase):
     def test_picks_the_latest_pending(self):
         old = self.pending("alpha", sid="11111111")
         new = self.pending("alpha", sid="22222222")
-        os.rename(old, os.path.join(os.path.dirname(old), "20200101T000000Z-11111111.md"))
         self.call(migrate.run, self.ident(), None)
         self.assertEqual(handoff.parse(new)[0]["status"], "used")
-        self.assertEqual(len(handoff.pending(CWD, "alpha")), 1)
+        self.assertEqual(handoff.parse(old)[0]["status"], "superseded")
 
     def test_names_a_live_holder_first(self):
         self.pending("alpha")

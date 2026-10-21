@@ -31,8 +31,7 @@ def hook_start(event):
 
 
 def _holder_note(holder):
-    path = os.path.join(config.claude_dir(), "projects", config.slug(holder.get("cwd", "")),
-                        "%s.jsonl" % holder.get("sessionId"))
+    path = config.transcript_path(holder.get("cwd", ""), str(holder.get("sessionId")))
     return "NOTE: a live session called %s holds this name in this folder: pid %s, status %s, " \
            "transcript %.0f MB." % (holder.get("name"), holder["pid"], holder.get("status"),
                                     size.size_mb(path))
@@ -43,7 +42,7 @@ def run(ident, name):
         found = handoff.latest_pending(ident.cwd)
         name = found[1].get("name") if found else None
     name = name or ident.handoff_name
-    for holder in registry.holders(name, ident.cwd, ident.session_id):
+    for holder in registry.holders(name, ident.cwd, ident.session_id, ident.pid):
         print(_holder_note(holder) + "\n")
     found = handoff.latest_pending(ident.cwd, config.safe_name(name))
     if not found:

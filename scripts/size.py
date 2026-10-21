@@ -43,18 +43,20 @@ def decide(cfg, mb, prompt, has_pending):
     """(context for the session, message for the maintainer); either may be None."""
     lang, un = cfg["lang"], cfg.get("unattended")
     n = "%.0f" % mb
+    pending_line = messages.user(lang, "pending") if has_pending else None
+    # S2 first: kc_mode.py runs in parallel and may already report the full mode.
+    if mb >= cfg["warn_mb"] and starts_night(cfg, prompt):
+        return messages.ctx("night", mb=n), messages.user(lang, "night", mb=n)
     if isinstance(un, dict) and unattended_active(cfg):
         if mb >= un.get("ceiling_mb", 1000):
             return messages.ctx("ceiling", mb=n), None
         return None, None
-    pending_line = messages.user(lang, "pending") if has_pending else None
-    if mb >= cfg["warn_mb"] and starts_night(cfg, prompt):
-        return messages.ctx("night", mb=n), messages.user(lang, "night", mb=n)
+    warn = messages.ctx("pending" if has_pending else "warn", mb=n)
     if mb >= cfg["tell_user_mb"]:
         lines = [messages.user(lang, "big", mb=n), pending_line]
-        return messages.ctx("warn", mb=n), "\n".join(x for x in lines if x)
+        return warn, "\n".join(x for x in lines if x)
     if mb >= cfg["warn_mb"]:
-        return messages.ctx("warn", mb=n), pending_line
+        return warn, pending_line
     return None, pending_line
 
 
@@ -80,8 +82,7 @@ def hook(event):
 
 def run_command(ident, path):
     if path is None and ident.session_id:
-        path = os.path.join(config.claude_dir(), "projects", config.slug(ident.cwd),
-                            ident.session_id + ".jsonl")
+        path = config.transcript_path(ident.cwd, ident.session_id)
     if path is None:
         print("no transcript: give a path", file=sys.stderr)
         return 2

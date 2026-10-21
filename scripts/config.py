@@ -1,4 +1,5 @@
 """Paths, project configuration and the folder slug."""
+import glob
 import json
 import os
 import re
@@ -15,8 +16,31 @@ def claude_dir():
     return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
 
 
+def raw_slug(cwd):
+    """Claude Code's folder name for a cwd: every non-alphanumeric character becomes `-`."""
+    return re.sub(r"[^A-Za-z0-9]", "-", cwd)
+
+
 def slug(cwd):
-    return cwd.replace("/", "-")
+    """The same, cut to 200 characters (Claude Code appends an undocumented hash past that)."""
+    return raw_slug(cwd)[:200]
+
+
+def transcript_dirs(cwd):
+    """The `projects/` folders that may hold this cwd's transcripts."""
+    projects = os.path.join(claude_dir(), "projects")
+    if len(raw_slug(cwd)) <= 200:
+        return [os.path.join(projects, raw_slug(cwd))]
+    return sorted(glob.glob(os.path.join(glob.escape(projects), glob.escape(slug(cwd)) + "*")))
+
+
+def transcript_path(cwd, session_id):
+    """Where a session's transcript is, or the plain guess when it is not there."""
+    for folder in transcript_dirs(cwd):
+        path = os.path.join(folder, session_id + ".jsonl")
+        if os.path.exists(path):
+            return path
+    return os.path.join(transcript_dirs(cwd)[0] if transcript_dirs(cwd) else "", session_id + ".jsonl")
 
 
 def project_dir(cwd):

@@ -36,10 +36,17 @@ class CrewCase(unittest.TestCase):
         with open(os.path.join(folder, "project.json"), "w") as f:
             json.dump(cfg, f)
 
-    def session(self, pid, sid, name="alpha", status="idle", cwd=CWD):
-        with open(os.path.join(self.claude, "sessions", "%d.json" % pid), "w") as f:
-            json.dump({"pid": pid, "sessionId": sid, "cwd": cwd, "name": name,
-                       "nameSource": "user", "status": status, "updatedAt": 0}, f)
+    def session(self, pid, sid, name="alpha", status="idle", cwd=CWD, started="auto"):
+        """A registry file. `started` is procStart: "auto" reads the real one, None omits it."""
+        import registry
+        if started == "auto":
+            started = registry.proc_start(pid) if isinstance(pid, int) and pid > 1 else None
+        entry = {"pid": pid, "sessionId": sid, "cwd": cwd, "name": name,
+                 "nameSource": "user", "status": status, "updatedAt": 0}
+        if started:
+            entry["procStart"] = started
+        with open(os.path.join(self.claude, "sessions", "%s.json" % pid), "w") as f:
+            json.dump(entry, f)
 
     def transcript(self, sid, mb=0, lines=None):
         path = os.path.join(self.claude, "projects", SLUG, sid + ".jsonl")

@@ -76,9 +76,9 @@ class Recover(CrewCase):
 
     def test_read_limit_bounds_the_search(self):
         self.transcript("old00000", lines=[title("alpha")] + [user("f" * 200)] * 50)
-        with unittest.mock.patch.object(recover, "MAX_READ", 1000):
+        with unittest.mock.patch.object(recover, "MAX_TITLE", 1000):
             self.assertIsNone(recover.last_title(
-                os.path.join(self.claude, "projects", "-work-proj", "old00000.jsonl")))
+                os.path.join(self.claude, "projects", "-work-proj", "old00000.jsonl"), recover.Budget(10**9)))
 
     def test_reverse_lines_handles_boundaries(self):
         path = os.path.join(self.tmp, "f")
@@ -86,5 +86,5 @@ class Recover(CrewCase):
         with open(path, "w") as f:
             f.write("\n".join(lines) + "\n")
         for chunk in (1, 7, 64, 1000, 10**6):
-            got = [x.decode() for x in recover.reverse_lines(path, chunk=chunk)]
+            got = [x.decode() for x in recover.reverse_lines(path, recover.Budget(10**9), chunk=chunk)]
             self.assertEqual(got, lines[::-1], chunk)

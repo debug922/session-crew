@@ -39,7 +39,8 @@ class AttendedTable(CrewCase):
     def test_warn_with_pending_gives_the_pending_line(self):
         self.pending("alpha")
         rc, ctx, msg = hook(self, 450)
-        self.assertIn("/handoff", ctx)
+        self.assertNotIn("/handoff", ctx)
+        self.assertIn("already written", ctx)
         self.assertIn("Passaggio pronto", msg)
 
     def test_tell_user(self):
