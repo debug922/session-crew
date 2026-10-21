@@ -1,0 +1,11 @@
+{
+  "name": "session-crew",
+  "owner": {"name": "Giovanni Sortino"},
+  "plugins": [
+    {
+      "name": "session-crew",
+      "source": "./",
+      "description": "Size warnings, /handoff and /migrate for long-lived sessions."
+    }
+  ]
+}

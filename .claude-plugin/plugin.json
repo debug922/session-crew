@@ -1,0 +1,5 @@
+{
+  "name": "session-crew",
+  "version": "0.1.0",
+  "description": "Hand a long-lived Claude Code session over to a fresh conversation: size warnings, /handoff and /migrate."
+}

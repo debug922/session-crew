@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/scripts/crew.py\" hook size", "timeout": 10},
+          {"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/scripts/crew.py\" hook rename", "timeout": 15}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {"type": "command", "command": "python3 -I \"${CLAUDE_PLUGIN_ROOT}/scripts/crew.py\" hook start", "timeout": 10}
+        ]
+      }
+    ]
+  }
+}
