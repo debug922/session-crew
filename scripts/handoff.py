@@ -8,7 +8,7 @@ import config
 
 SECTIONS = [
     "## Work under way",
-    "## His last requests and decisions",
+    "## Last requests and decisions",
     "## What remains",
     "## Where things are",
 ]

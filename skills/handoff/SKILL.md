@@ -12,7 +12,7 @@ Write the handover of this session, then tell the maintainer how to resume it.
 2. Write the body in Markdown with exactly these four sections, in this order:
    - `## Work under way`: the item, its branch or worktree, what is done and what is not, in a few
      lines.
-   - `## His last requests and decisions`: the maintainer's own words, quoted, for each request and
+   - `## Last requests and decisions`: the user's own words, quoted, for each request and
      decision still in force. Quote; do not paraphrase.
    - `## What remains`: the next steps, in order, with the first one stated so a fresh session can
      start on it.

@@ -13,6 +13,9 @@ BODY = "\n".join(h + "\ntext of " + h for h in handoff.SECTIONS)
 
 
 class Save(CrewCase):
+    def test_the_second_section_is_neutral_about_who_speaks(self):
+        self.assertEqual(handoff.SECTIONS[1], "## Last requests and decisions")
+
     def test_refuses_each_missing_section(self):
         for i, heading in enumerate(handoff.SECTIONS):
             body = "\n".join(h + "\nx" for j, h in enumerate(handoff.SECTIONS) if j != i)

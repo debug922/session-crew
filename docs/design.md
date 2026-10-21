@@ -17,8 +17,8 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
 ## 2. Facts it rests on (checked 2026-10-21, Claude Code 2.1.301 to 2.1.306)
 
 1. **`/clear` keeps the name.** With no argument it starts a new conversation in the same process:
-   same pid, same name and `nameSource`, a new session id and a new `.jsonl`. Measured on pid 5010:
-   session d0c12f77 (551 MB) became 0cbe5002 (2 KB), name kept. VS Code's memory did not drop, and
+   same pid, same name and `nameSource`, a new session id and a new `.jsonl`. Measured on one live
+   session: session d0c12f77 (551 MB) became 0cbe5002 (2 KB), name kept. VS Code's memory did not drop, and
    had not held the 551 MB to begin with.
 2. **Session registry**: `~/.claude/sessions/<pid>.json` holds `pid`, `sessionId`, `cwd`, `name`,
    `nameSource`, `status` (`idle`, `busy`, `waiting`), `updatedAt`. A file can outlive its process:
@@ -40,7 +40,8 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
    another session never executes a command; a `/loop` prompt can.
 5. **`hookSpecificOutput.sessionTitle`**, on UserPromptSubmit and on SessionStart (sources
    `startup`, `resume`, `fork`), sets the name as `/rename` does; Claude Code records it with
-   `nameSource: "user"`, which is what kcalloc's release door trusts. Undocumented, and from the
+   `nameSource: "user"`, which other tools may take as proof of a name (kcalloc, the project this was first written
+   for, has a release door that does), hence the care of the rename hook. Undocumented, and from the
    binary apparently not applied: a name another live session holds.
 6. **No way to rename another running session**: only the maintainer can, from its own tab.
 7. **Plugins**: `.claude-plugin/plugin.json` (only `name` required), `skills/<name>/SKILL.md`,
@@ -58,7 +59,7 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
 1. Past `warn_mb` the size hook tells the session (section 5); the session closes the item under
    way and runs `/handoff` at the next pause. The maintainer may run `/handoff` whenever he likes.
 2. While a pending handoff exists for this session's name and folder, the size hook tells the
-   maintainer on every message: *"Passaggio pronto: scrivi /clear e poi /migrate."*
+   maintainer on every message: *"Passaggio pronto: scrivi /clear e poi /migrate."* (with `lang` `it`)
 3. He types `/clear`. The SessionStart hook (source `clear`, and `startup`) sees the pending
    handoff for its name and tells both: *"/migrate"*.
 4. `/migrate` reads the handoff, summarises it in a few lines, says who the session is (section 8)
@@ -76,27 +77,30 @@ Everything lives under `~/.session-crew/<slug>/`, outside every repository, the 
 - `project.json`, optional; defaults when missing or partial:
   ```json
   {
-    "lang": "it",
+    "lang": "en",
     "warn_mb": 400,
     "tell_user_mb": 800,
     "unattended": {
-      "status_command": ["python3", "-I", "/Users/giovannisortino/.claude/hooks/kc_mode.py", "status"],
-      "active_pattern": "^mode: full",
-      "start_prefixes": ["vai in modalità full"],
-      "ceiling_mb": 1000
+      "status_command": ["my-mode-tool", "status"],
+      "active_pattern": "^mode: night",
+      "start_prefixes": ["start the night"],
+      "ceiling_mb": 1000,
+      "modes": ["auto", "dontAsk", "bypassPermissions"]
     },
     "sessions": [
-      {"name": "kcalloc", "role": "kcalloc backend: core, cloud, web, CI, devops",
-       "owns": ["kcalloc-core", "kcalloc", "kcalloc-cloud"]}
+      {"name": "backend", "role": "the backend: api, workers, CI",
+       "owns": ["api", "workers"]}
     ]
   }
   ```
-  Without `unattended` there is no unattended mode. The status command runs without a shell, with a
+  The `unattended` block is an example, not a default (`modes` alone has one, shown). The first
+  project that used session-crew reads its own mode tool; any command that prints a line the
+  pattern matches will do. Without `unattended` there is no unattended mode. The status command runs without a shell, with a
   3 s timeout; a failure counts as attended.
 - `<name>/<UTC yyyymmddThhmmssZ>-<session id, 8 chars>.md`: one handover. Front matter
   `status` (`pending` or `used`), `name`, `cwd`, `session_id`, `written_at`, and once used
-  `used_at`, `used_by`. Sections, in order: `## Work under way`, `## His last requests and
-  decisions` (his words, quoted), `## What remains`, `## Where things are` (branches, unpushed
+  `used_at`, `used_by`. Sections, in order: `## Work under way`, `## Last requests and
+  decisions` (the user's own words, quoted), `## What remains`, `## Where things are` (branches, unpushed
   commits, run folders). Never a copy of the memory: it points to it.
 - An unnamed session uses `unnamed-<session id, 8 chars>`.
 
@@ -104,7 +108,7 @@ Everything lives under `~/.session-crew/<slug>/`, outside every repository, the 
 registry file: that file gives its session id, name and cwd. `--name`, `--session-id` and `--cwd`
 override (Copilot passes them; there is no registry there).
 
-## 5. The size hook (replaces kcalloc's `kc_size.py`)
+## 5. The size hook (replaces kcalloc's first `kc_size.py`)
 
 UserPromptSubmit, reads `transcript_path`'s size. Never holds up a message: on any error it writes
 to stderr and exits 1. Output: `hookSpecificOutput.additionalContext` for the session,
@@ -128,7 +132,18 @@ Unattended (the status command matches `active_pattern`) (S3):
 - `ceiling_mb` and over: to the session, park the queue at the next release point, write the
   handoff and the report; nothing to the maintainer (he is away).
 
-Messages to the maintainer follow `lang` (`it`, `en`); context for the session is English.
+**The permission mode of a night (N3).** When the prompt starts a night (the same test as S2), the
+hook also reads the event's `permission_mode` (`default`, `plan`, `acceptEdits`, `auto`, `dontAsk`,
+`bypassPermissions`). If it is not in `unattended.modes` (default `["auto", "dontAsk",
+"bypassPermissions"]`), whatever the size: to the maintainer *"Questa sessione è in modalità {mode}:
+di notte ogni richiesta di permesso la ferma fino al mattino. Passa alla modalità auto prima di
+andare."* (`en`: *"This session is in {mode} mode: at night every permission request stops it until
+the morning. Switch to auto mode before you go."*); to the session, a context sentence saying the
+same and not to start the unattended run until the mode is changed. When S2 applies too, one message
+of two lines and one context of two sentences go out. A missing `permission_mode` counts as fine.
+
+Messages to the maintainer follow `lang` (`en` by default, or `it`); context for the session is
+English.
 
 ## 6. The rename hook (fallback path only)
 
@@ -173,9 +188,8 @@ maintainer *"Passaggio in attesa per <name>: scrivi /migrate."* (or `/migrate <n
 
 ## 8. The skills
 
-- `skills/handoff/SKILL.md`: what goes in each section, his words quoted, nothing copied from
-  memory; for a kcalloc session also the report of `guidelines/agents.md` §9; then
-  `crew.py handoff save`; then tell the maintainer `/clear`, `/migrate`.
+- `skills/handoff/SKILL.md`: what goes in each section, the user's words quoted, nothing copied from
+  memory; for a kcalloc session also its report; then `crew.py handoff save`; then tell the maintainer `/clear`, `/migrate`.
 - `skills/migrate/SKILL.md`: `disable-model-invocation: true`, `argument-hint: [name]`; runs
   `crew.py migrate $ARGUMENTS`; summarises in at most ten lines: who the session is, the item under
   way, the next step; then starts from the handoff, not from the memory's whole index.
@@ -202,11 +216,10 @@ that only contains `/migrate kcalloc` mid-text; `recover` on a transcript larger
 the summary in an earlier chunk; `handoff save` refusing a missing section; `migrate` marking used
 and never picking a used handoff.
 
-## 11. Install (the maintainer's)
+## 11. Install
 
-1. `/plugin marketplace add ~/code/session-crew`, `/plugin install session-crew@session-crew`.
-2. Remove `kc_size.py` from `UserPromptSubmit` in `~/.claude/settings.json` (both would run).
-3. Write `~/.session-crew/-Users-giovannisortino-code-go/project.json` (section 4).
-4. Then kcalloc `guidelines/agents.md` §11 and global rule 8 point to session-crew.
-
-Creating the GitHub repository and pushing stay his.
+1. `/plugin marketplace add debug922/session-crew`, `/plugin install session-crew@session-crew`
+   (from a clone: `/plugin marketplace add ./session-crew`).
+2. If another size hook is already in `~/.claude/settings.json` under `UserPromptSubmit`, remove it
+   (both would run).
+3. Optionally write `~/.session-crew/<slug>/project.json` (section 4).
