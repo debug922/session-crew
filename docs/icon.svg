@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14532D"/>
+      <stop offset="1" stop-color="#0F2E25"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+
+  <!-- the old session, behind and faded -->
+  <rect x="150" y="196" width="470" height="360" rx="56" fill="#FFFFFF" fill-opacity="0.22"/>
+  <rect x="150" y="196" width="470" height="76" rx="56" fill="#FFFFFF" fill-opacity="0.18"/>
+  <circle cx="214" cy="234" r="14" fill="#FFFFFF" fill-opacity="0.45"/>
+  <circle cx="258" cy="234" r="14" fill="#FFFFFF" fill-opacity="0.45"/>
+  <circle cx="302" cy="234" r="14" fill="#FFFFFF" fill-opacity="0.45"/>
+
+  <!-- the fresh session, in front -->
+  <rect x="404" y="468" width="470" height="360" rx="56" fill="#F8FAF7"/>
+  <path d="M404 524 a56 56 0 0 1 56 -56 h358 a56 56 0 0 1 56 56 v20 h-470 z" fill="#DDE7DF"/>
+  <circle cx="468" cy="506" r="14" fill="#14532D" fill-opacity="0.55"/>
+  <circle cx="512" cy="506" r="14" fill="#14532D" fill-opacity="0.55"/>
+  <circle cx="556" cy="506" r="14" fill="#14532D" fill-opacity="0.55"/>
+  <!-- prompt: chevron and cursor -->
+  <path d="M490 628 l78 58 l-78 58" fill="none" stroke="#14532D" stroke-width="40"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="610" y="716" width="150" height="40" rx="20" fill="#14532D"/>
+
+  <!-- the handoff: an arc from the old session to the new one -->
+  <path d="M650 300 C 840 290, 900 380, 880 440" fill="none" stroke="url(#arrow)"
+        stroke-width="46" stroke-linecap="round"/>
+  <path d="M818 418 L 884 470 L 930 400" fill="none" stroke="#F59E0B" stroke-width="46"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
