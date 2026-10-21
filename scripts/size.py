@@ -39,14 +39,34 @@ def starts_night(cfg, prompt):
     return any(text.startswith(p.lower()) for p in un.get("start_prefixes", []) if p)
 
 
-def decide(cfg, mb, prompt, has_pending):
+DEFAULT_MODES = ["auto", "dontAsk", "bypassPermissions"]
+
+
+def bad_mode(cfg, mode):
+    """The permission mode when it would stop a night on a permission request, else None (N3)."""
+    if not mode:
+        return None
+    modes = cfg["unattended"].get("modes", DEFAULT_MODES)
+    return None if mode in modes else mode
+
+
+def decide(cfg, mb, prompt, has_pending, mode=None):
     """(context for the session, message for the maintainer); either may be None."""
     lang, un = cfg["lang"], cfg.get("unattended")
     n = "%.0f" % mb
     pending_line = messages.user(lang, "pending") if has_pending else None
-    # S2 first: kc_mode.py runs in parallel and may already report the full mode.
-    if mb >= cfg["warn_mb"] and starts_night(cfg, prompt):
-        return messages.ctx("night", mb=n), messages.user(lang, "night", mb=n)
+    # S2 and N3 first: the status command runs in parallel and may already report the night.
+    if starts_night(cfg, prompt):
+        ctxs, msgs = [], []
+        if mb >= cfg["warn_mb"]:
+            ctxs.append(messages.ctx("night", mb=n))
+            msgs.append(messages.user(lang, "night", mb=n))
+        wrong = bad_mode(cfg, mode)
+        if wrong:
+            ctxs.append(messages.ctx("mode", mode=wrong))
+            msgs.append(messages.user(lang, "mode", mode=wrong))
+        if ctxs:
+            return " ".join(ctxs), "\n".join(msgs)
     if isinstance(un, dict) and unattended_active(cfg):
         if mb >= un.get("ceiling_mb", 1000):
             return messages.ctx("ceiling", mb=n), None
@@ -75,7 +95,8 @@ def hook(event):
     cfg = config.load_project(ident.cwd)
     mb = size_mb(event.get("transcript_path"))
     has_pending = handoff.latest_pending(ident.cwd, ident.handoff_name) is not None
-    context, message = decide(cfg, mb, event.get("prompt", ""), has_pending)
+    context, message = decide(cfg, mb, event.get("prompt", ""), has_pending,
+                              event.get("permission_mode"))
     emit("UserPromptSubmit", context, message)
     return 0
 

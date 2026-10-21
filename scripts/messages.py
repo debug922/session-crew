@@ -7,6 +7,8 @@ USER = {
         "night": "Questa sessione pesa {mb} MB: prima della notte /handoff, /clear, /migrate, "
                  "poi ripeti il comando.",
         "waiting": "Passaggio in attesa per {name}: scrivi {cmd}.",
+        "mode": "Questa sessione è in modalità {mode}: di notte ogni richiesta di permesso la "
+                "ferma fino al mattino. Passa alla modalità auto prima di andare.",
     },
     "en": {
         "pending": "Handoff ready: type /clear and then /migrate.",
@@ -14,6 +16,8 @@ USER = {
         "night": "This session weighs {mb} MB: before the night run /handoff, /clear, /migrate, "
                  "then repeat the command.",
         "waiting": "Handoff waiting for {name}: type {cmd}.",
+        "mode": "This session is in {mode} mode: at night every permission request stops it until "
+                "the morning. Switch to auto mode before you go.",
     },
 }
 
@@ -22,6 +26,8 @@ CTX = {
             "at the next pause, and start no new item in this conversation.",
     "night": "The transcript of this session is {mb} MB. Do not start the unattended run in this "
              "conversation; tell the maintainer why: he must /handoff, /clear, /migrate first.",
+    "mode": "The permission mode of this session is {mode}: at night every permission request "
+            "would stop it. Do not start the unattended run until the mode is changed to auto.",
     "ceiling": "The transcript of this session is {mb} MB, over the unattended ceiling. Park the "
                "queue at the next release point, write the handoff and the report.",
     "waiting": "A pending handoff exists for {name}. The maintainer will type {cmd}.",

@@ -7,9 +7,11 @@ from helpers import CWD, CrewCase, ROOT
 import size
 
 
-def hook(case, mb, prompt="hello", sid="s1"):
+def hook(case, mb, prompt="hello", sid="s1", mode=None):
     path = case.transcript(sid, mb)
     event = {"session_id": sid, "cwd": CWD, "transcript_path": path, "prompt": prompt}
+    if mode:
+        event["permission_mode"] = mode
     rc, out, _ = case.call(size.hook, event)
     out = out or {}
     ctx = out.get("hookSpecificOutput", {}).get("additionalContext")
@@ -102,6 +104,80 @@ class Night(CrewCase):
                                  "active_pattern": "^mode: full", "ceiling_mb": 1000})
         rc, ctx, msg = hook(self, 450)
         self.assertIn("/handoff", ctx)
+
+
+class NightMode(CrewCase):
+    """N3: the permission mode when a night starts."""
+    NIGHT = "vai in modalità full"
+
+    def setUp(self):
+        super().setUp()
+        self.session(100, "s1", "alpha")
+
+    def config(self, **extra):
+        un = {"status_command": ["sh", "-c", "echo mode: off"], "active_pattern": "^mode: full",
+              "start_prefixes": [self.NIGHT], "ceiling_mb": 1000}
+        un.update(extra)
+        self.project(unattended=un)
+
+    def test_default_mode_over_a_small_session_warns_both(self):
+        self.config()
+        rc, ctx, msg = hook(self, 10, prompt=self.NIGHT, mode="default")
+        self.assertEqual(msg, "Questa sessione è in modalità default: di notte ogni richiesta di "
+                              "permesso la ferma fino al mattino. Passa alla modalità auto "
+                              "prima di andare.")
+        self.assertIn("mode of this session is default", ctx)
+        self.assertIn("Do not start the unattended run until the mode is changed", ctx)
+
+    def test_english_message(self):
+        self.config()
+        self.project(lang="en", unattended={"status_command": ["true"], "start_prefixes": [self.NIGHT]})
+        _, _, msg = hook(self, 10, prompt=self.NIGHT, mode="plan")
+        self.assertEqual(msg, "This session is in plan mode: at night every permission request "
+                              "stops it until the morning. Switch to auto mode before you go.")
+
+    def test_each_unattended_mode_is_fine(self):
+        self.config()
+        for mode in ["auto", "dontAsk", "bypassPermissions"]:
+            self.assertEqual(hook(self, 10, prompt=self.NIGHT, mode=mode), (0, None, None), mode)
+
+    def test_other_modes_warn(self):
+        self.config()
+        for mode in ["default", "plan", "acceptEdits"]:
+            self.assertIn(mode, hook(self, 10, prompt=self.NIGHT, mode=mode)[2], mode)
+
+    def test_missing_mode_is_fine(self):
+        self.config()
+        self.assertEqual(hook(self, 10, prompt=self.NIGHT), (0, None, None))
+
+    def test_not_a_night_prompt_is_not_checked(self):
+        self.config()
+        self.assertEqual(hook(self, 10, prompt="hello", mode="default"), (0, None, None))
+
+    def test_no_unattended_config_is_not_checked(self):
+        self.project()
+        self.assertEqual(hook(self, 10, prompt=self.NIGHT, mode="default"), (0, None, None))
+
+    def test_configured_modes_replace_the_default(self):
+        self.config(modes=["acceptEdits"])
+        self.assertEqual(hook(self, 10, prompt=self.NIGHT, mode="acceptEdits"), (0, None, None))
+        self.assertIn("auto", hook(self, 10, prompt=self.NIGHT, mode="auto")[2])
+
+    def test_heavy_and_wrong_mode_gives_two_lines_and_two_sentences(self):
+        self.config()
+        rc, ctx, msg = hook(self, 450, prompt=self.NIGHT, mode="default")
+        lines = msg.split("\n")
+        self.assertEqual(len(lines), 2)
+        self.assertIn("pesa 450 MB", lines[0])
+        self.assertIn("modalità default", lines[1])
+        self.assertIn("Do not start the unattended run in this conversation", ctx)
+        self.assertIn("until the mode is changed", ctx)
+
+    def test_heavy_with_good_mode_is_only_the_size_warning(self):
+        self.config()
+        rc, ctx, msg = hook(self, 450, prompt=self.NIGHT, mode="auto")
+        self.assertEqual(len(msg.split("\n")), 1)
+        self.assertNotIn("mode", ctx)
 
 
 class Entry(CrewCase):
