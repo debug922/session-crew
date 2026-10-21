@@ -25,7 +25,7 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
    check the pid is alive.
 3. **Transcripts**: `~/.claude/projects/<slug>/<sessionId>.jsonl`, where the slug is the cwd with
    every non-alphanumeric character (`/`, dots, underscores, spaces, ...) turned into `-`
-   (`/Users/x/code/go` is `-Users-x-code-go`). A slug over 200 characters is cut to 200 and a hash of
+   (`/home/x/code/app` is `-home-x-code-app`). A slug over 200 characters is cut to 200 and a hash of
    the full path is appended (the hash is undocumented): the code that looks for transcripts globs
    `<first 200 characters>*` under `projects/`. `~/.session-crew/<slug>/` uses the same slug cut to
    200, with no hash. Records used here:
@@ -189,7 +189,8 @@ maintainer *"Passaggio in attesa per <name>: scrivi /migrate."* (or `/migrate <n
 ## 8. The skills
 
 - `skills/handoff/SKILL.md`: what goes in each section, the user's words quoted, nothing copied from
-  memory; for a kcalloc session also its report; then `crew.py handoff save`; then tell the maintainer `/clear`, `/migrate`.
+  memory; for a kcalloc session also its report; then
+  `crew.py handoff save`; then tell the maintainer `/clear`, `/migrate`.
 - `skills/migrate/SKILL.md`: `disable-model-invocation: true`, `argument-hint: [name]`; runs
   `crew.py migrate $ARGUMENTS`; summarises in at most ten lines: who the session is, the item under
   way, the next step; then starts from the handoff, not from the memory's whole index.
