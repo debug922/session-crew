@@ -24,7 +24,11 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
    `nameSource`, `status` (`idle`, `busy`, `waiting`), `updatedAt`. A file can outlive its process:
    check the pid is alive.
 3. **Transcripts**: `~/.claude/projects/<slug>/<sessionId>.jsonl`, where the slug is the cwd with
-   every `/` turned into `-` (`/Users/x/code/go` is `-Users-x-code-go`). Records used here:
+   every non-alphanumeric character (`/`, dots, underscores, spaces, ...) turned into `-`
+   (`/Users/x/code/go` is `-Users-x-code-go`). A slug over 200 characters is cut to 200 and a hash of
+   the full path is appended (the hash is undocumented): the code that looks for transcripts globs
+   `<first 200 characters>*` under `projects/`. `~/.session-crew/<slug>/` uses the same slug cut to
+   200, with no hash. Records used here:
    - `{"type": "custom-title", "customTitle": "<name>", "sessionId": ...}`, repeated through the file;
    - a compaction is a `system` record with `"subtype": "compact_boundary"`, followed by a `user`
      record with `"isCompactSummary": true` whose `message.content` is the summary;
@@ -175,6 +179,9 @@ maintainer *"Passaggio in attesa per <name>: scrivi /migrate."* (or `/migrate <n
 - `skills/migrate/SKILL.md`: `disable-model-invocation: true`, `argument-hint: [name]`; runs
   `crew.py migrate $ARGUMENTS`; summarises in at most ten lines: who the session is, the item under
   way, the next step; then starts from the handoff, not from the memory's whole index.
+
+In a plugin skill's body Claude Code substitutes `${CLAUDE_PLUGIN_ROOT}` (documented); it is not an
+environment variable of the Bash tool, so the skills write the full command with it in the body.
 
 Frontmatter only uses fields both hosts read: `name` (equal to the folder), `description`,
 `argument-hint`, `disable-model-invocation`.

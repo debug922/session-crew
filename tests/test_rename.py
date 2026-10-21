@@ -1,6 +1,7 @@
 import os
 import signal
 import subprocess
+import time
 import unittest.mock
 
 from helpers import CWD, CrewCase
@@ -88,6 +89,7 @@ class RenameHook(CrewCase):
 
     def test_holder_that_ignores_sigterm_gets_no_title(self):
         self.child("trap '' TERM; sleep 60")
+        time.sleep(0.5)  # let the shell install its trap
         with unittest.mock.patch.object(rename, "WAIT_S", 0.5):
             out = self.run_hook("/migrate kcalloc")
         self.assertNotIn("sessionTitle", out)
