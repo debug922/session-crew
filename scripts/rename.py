@@ -11,7 +11,8 @@ import messages
 import registry
 
 WAIT_S = 5.0
-PROMPT_RE = re.compile(r"/migrate (%s)" % config.NAME_RE.pattern)
+# A plugin's skill is typed with the plugin's name in front; the bare form is kept too.
+PROMPT_RE = re.compile(r"/(?:session-crew:)?migrate (%s)" % config.NAME_RE.pattern)
 
 
 def _output(title=None, context=None):

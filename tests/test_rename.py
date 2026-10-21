@@ -44,7 +44,9 @@ class RenameHook(CrewCase):
 
     def test_other_prompts_do_nothing(self):
         for prompt in ["hello", "/migrate", "/migrate a b", "please /migrate kcalloc",
-                       "ok then\n/migrate kcalloc", "/migrate ../x", "/migrate kcalloc now"]:
+                       "ok then\n/migrate kcalloc", "/migrate ../x", "/migrate kcalloc now",
+                       "/other-plugin:migrate kcalloc", "/session-crew:migrate",
+                       "/session-crew: migrate kcalloc"]:
             self.assertIsNone(self.run_hook(prompt), prompt)
 
     def test_no_pending_handoff_does_nothing(self):
@@ -60,6 +62,10 @@ class RenameHook(CrewCase):
 
     def test_no_holder_gives_the_title(self):
         out = self.run_hook("/migrate kcalloc")
+        self.assertEqual(out["sessionTitle"], "kcalloc")
+
+    def test_the_plugin_form_gives_the_title(self):
+        out = self.run_hook("/session-crew:migrate kcalloc")
         self.assertEqual(out["sessionTitle"], "kcalloc")
 
     def test_dead_holder_counts_as_no_holder(self):
