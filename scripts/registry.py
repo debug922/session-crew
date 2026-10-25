@@ -45,10 +45,13 @@ def pid_alive(pid):
 
 
 def find_by_session_id(session_id):
-    for entry in read_all():
-        if entry.get("sessionId") == session_id:
-            return entry
-    return None
+    """The registry file of a session: Claude Code can leave two for one id (a stale one under an
+    old pid), so the one whose pid is alive wins, and among equals the newest `updatedAt`. With
+    none alive the newest still answers (a name is read from it, nothing is signalled)."""
+    found = [e for e in read_all() if e.get("sessionId") == session_id]
+    live = [e for e in found if type(e.get("pid")) is int and e["pid"] > 1 and pid_alive(e["pid"])]
+    pool = live or found
+    return max(pool, key=lambda e: e.get("updatedAt") or 0) if pool else None
 
 
 def parent_pid(pid):
