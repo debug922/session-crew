@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I drops it
 
 import configcmd  # noqa: E402
 import door  # noqa: E402
+import guard  # noqa: E402
 import handoff  # noqa: E402
 import migrate  # noqa: E402
 import recover  # noqa: E402
@@ -16,6 +17,8 @@ import rename  # noqa: E402
 import size  # noqa: E402
 
 HOOKS = {"size": size.hook, "rename": rename.hook, "start": migrate.hook_start}
+# The guards take the event's raw text: a crash on a line naming the door must still refuse.
+GUARDS = {"guard-bash": guard.run_bash, "guard-files": guard.run_files}
 
 
 def parser():
@@ -26,7 +29,7 @@ def parser():
     p = argparse.ArgumentParser(prog="crew.py")
     sub = p.add_subparsers(dest="cmd", required=True)
     h = sub.add_parser("hook")
-    h.add_argument("which", choices=sorted(HOOKS))
+    h.add_argument("which", choices=sorted(HOOKS) + sorted(GUARDS))
     ho = sub.add_parser("handoff", parents=[common])
     ho.add_argument("action", choices=["save", "status"])
     for cmd in ("migrate", "recover"):
@@ -44,6 +47,8 @@ def parser():
 
 def run_hook(which):
     """A hook never holds up a message: any error goes to stderr, exit 1."""
+    if which in GUARDS:
+        return GUARDS[which](sys.stdin.read())
     try:
         event = json.load(sys.stdin)
         return HOOKS[which](event if isinstance(event, dict) else {})
