@@ -80,6 +80,9 @@ class RenameSubprocess(Procs):
 
     def test_same_pid_as_the_session_with_another_session_id(self):
         proc = self.sleeper()
+        # The caller moves to the sleeper's pid: setUp's file for it would be a second "me", and
+        # which of the two the registry met first changed from run to run.
+        os.remove(os.path.join(self.claude, "sessions", "100.json"))
         self.session(proc.pid, "me", "newtab")
         self.raw_session("other.json", pid=proc.pid,
                          procStart=registry.proc_start(proc.pid))
