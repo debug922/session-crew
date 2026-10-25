@@ -32,7 +32,7 @@ class Pushes(GuardCase):
         self.assertEqual(self.bash("git push", cwd=self.wt), "deny")  # a worktree of a table repository
 
     def test_a_push_that_cannot_be_placed_is_denied(self):
-        for cmd, cwd in [("git push", self.work), ("git push", "/nowhere/x"),
+        for cmd, cwd in [("git push", self.work), ("git push", self.work + "/plain"),
                          ("cd other && git push", self.work), ("git --git-dir=other/.git push", self.work)]:
             self.assertEqual(self.bash(cmd, cwd=cwd), "deny", cmd)
 
@@ -58,10 +58,10 @@ class Pushes(GuardCase):
 
 
 class Deletes(GuardCase):
-    def test_the_project_is_found_from_a_subfolder_and_from_the_sessions_own_folder(self):
+    def test_the_project_is_found_from_a_subfolder_of_the_events_folder(self):
         self.assertEqual(self.bash("git push --force", cwd=self.work + "/core/deeper/still"), "ask")
-        self.assertEqual(self.bash("git push --force", cwd="/elsewhere"), "ask")  # the registry's cwd
-        self.assertIsNone(self.bash("git push --force", cwd="/elsewhere", sid="s-unknown"))
+        # The project is the event's folder, as the door's is the process's: never the registry's.
+        self.assertIsNone(self.bash("git push --force", cwd="/elsewhere"))
 
     def test_a_push_that_deletes_or_rewrites_on_the_remote_asks_anywhere_in_a_project(self):
         for cmd in DELETES:
@@ -93,8 +93,10 @@ class Configuration(GuardCase):
         return 'python3 -I "%s" %s' % (guard.CREW, rest)
 
     def test_config_apply_asks_by_day_and_is_refused_at_night(self):
-        for cmd in [self.crew("config apply d.json"), "python3 -I /tmp/copy/crew.py config apply d.json"]:
-            self.assertEqual(self.bash(cmd), "ask", cmd)
+        self.assertEqual(self.bash(self.crew("config apply d.json")), "ask")
+        self.assertEqual(self.bash(self.crew("config apply d.json --cwd /tmp/x")), "ask")
+        # A copy of the script elsewhere is not the plugin's own path: refused, not asked.
+        self.assertEqual(self.bash("python3 -I /tmp/copy/crew.py config apply d.json"), "deny")
         self.night(True)
         self.assertEqual(self.bash(self.crew("config apply d.json")), "deny")
 
@@ -107,16 +109,19 @@ class Configuration(GuardCase):
         self.assertEqual(self.bash("echo {} > %s" % self.file), "deny")
 
     def test_writing_into_the_plugins_folder_asks(self):
-        for cmd in ["cp x.py %s/scripts/guard.py" % guard.ROOT, "echo x > %s/hooks/hooks.json" % guard.ROOT,
-                    "sed -i '' s/a/b/ %s/scripts/door.py" % guard.ROOT, "rm -r %s" % guard.ROOT]:
+        for cmd in ["echo x > %s/hooks/hooks.json" % guard.ROOT, "rm -r %s" % guard.ROOT,
+                    "cp x.md %s/README.md" % guard.ROOT]:
             self.assertEqual(self.bash(cmd), "ask", cmd)
+        # Anything naming the scripts that is not an allowed shape or a plain read is refused.
+        for cmd in ["cp x.py %s/scripts/guard.py" % guard.ROOT,
+                    "sed -i '' s/a/b/ %s/scripts/door.py" % guard.ROOT]:
+            self.assertEqual(self.bash(cmd), "deny", cmd)
 
     def test_reading_the_file_running_the_plugin_or_writing_a_draft_passes(self):
         for cmd in ["cat %s" % self.file, "jq . %s >/dev/null" % self.file, "ls %s/scripts" % guard.ROOT,
-                    self.crew("config discover > /tmp/found.json"), self.crew("config show"),
+                    self.crew("config discover"), self.crew("config show"),
                     self.crew("handoff save <<'H'\n## Work under way\nH"), self.crew("migrate"),
-                    "echo {} > %s/drafts/d.json" % os.path.dirname(self.file),
-                    "echo x > ~/.session-crew/-x-y/boss/handoff.md", "grep -n push %s/scripts/door.py" % guard.ROOT]:
+                    "grep -n push %s/scripts/door.py" % guard.ROOT]:
             self.assertIsNone(self.bash(cmd), cmd)
 
 

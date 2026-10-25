@@ -13,18 +13,19 @@ import sys
 import config
 import registry
 import repos
+import shapes
 import shellwords as sw
 import size
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CREW = os.path.join(ROOT, "scripts", "crew.py")
-_PATH = "|".join(re.escape(p) for p in sorted({CREW, os.path.realpath(CREW)}))
-DOOR = re.compile(r"python3 -I (?:\"(?:%s)\"|'(?:%s)'|(?:%s)) (?:push ([A-Za-z0-9][\w.-]*)"
-                  r"|tag ([A-Za-z0-9][\w.-]*) (v\d+\.\d+\.\d+))" % (_PATH, _PATH, _PATH))
-DOOR_WORDS = re.compile(r"crew\.py[\"']?\s+(?:push|tag)\b")
+CREW_PATHS = {CREW, os.path.realpath(CREW)}
+SCRIPTS = sorted({os.path.dirname(p) for p in CREW_PATHS})
 APPLY_WORDS = re.compile(r"crew\.py[\"']?\s+config\s+apply\b")
 RAW_DOOR = re.compile(r"crew\.py\W+(?:push|tag|config)\b")  # in the event's JSON text, for a crash
-PROJECT_FILE = re.compile(r"\.session-crew/[^/\s'\"]+/project\.json")
+CREW_HOME = r"\.session-crew"
+INTERPRETER = re.compile(r"(?:python[\d.]*|perl|ruby|node)")
+INLINE_FLAG = re.compile(r"-[A-Za-z]*[ceE]")
 WRITERS = {"Edit", "MultiEdit", "Write", "NotebookEdit"}
 NIGHT = (" A night is on and nobody is here to confirm, so this is refused instead of waiting until "
          "morning: leave it, or park the item and put the question in the report.")
@@ -33,14 +34,9 @@ CONFIG_ASK = ("This writes session-crew's configuration (the project file, which
 
 
 def find_project(event):
-    """The folder whose project governs this event: the event's, else the session's own."""
-    cwd = event.get("cwd") or os.getcwd()
-    entry = registry.find_by_session_id(event.get("session_id")) if event.get("session_id") else None
-    for c in (cwd, (entry or {}).get("cwd")):
-        found = config.locate(c) if c else None
-        if found:
-            return found
-    return None
+    """The folder whose project governs this event: the event's own, as the door finds its own
+    from the process's folder (never the registry's, so the two agree)."""
+    return config.locate(event.get("cwd") or os.getcwd())
 
 
 def session_name(event):
@@ -98,16 +94,11 @@ def where(toks, opts, cwd):
     return toplevel(start) if start else None
 
 
-def door(line, event, table):
-    m = DOOR.fullmatch(line)
-    if not m:
-        return Verdict("deny", "The door runs only as `python3 -I <plugin>/scripts/crew.py push <repo>` "
-                               "or `... tag <repo> vX.Y.Z`, by the plugin's own path, alone on its "
-                               "line (/push and /release write it).")
+def door(shape, event, table):
     if event.get("agent_id"):
         return Verdict("deny", "The door pushes and tags for a session itself, never for one of its "
                                "agents: the agent reports, the session releases.")
-    repo, tagged = m.group(1) or m.group(2), m.group(3)
+    repo, tagged = shape.repo, shape.version
     if table.entries is None:
         return Verdict("deny", "The door opens only for a repository of the project's table, and the "
                                "table could not be read (%s)." % table.error)
@@ -129,15 +120,29 @@ def door(line, event, table):
     return None
 
 
-def configuration(named, pcwd):
-    """Words that run `config apply` or write the project file or the plugin's folder."""
+def inline_code(toks):
+    """The code strings given to an interpreter with -c or -e (python, perl, ruby, node)."""
+    for i, t in enumerate(toks):
+        if not INTERPRETER.fullmatch(os.path.basename(t)):
+            continue
+        for k in range(i + 1, len(toks)):
+            if set(toks[k]) <= set(";&|()"):
+                break
+            if INLINE_FLAG.fullmatch(toks[k]) and k + 1 < len(toks):
+                yield toks[k + 1]
+                break
+
+
+def configuration(named, toks, pcwd):
+    """Words that run `config apply`, or write (a verb or a redirection) anything under the crew
+    home or the plugin's folder, or hand an interpreter inline code that names them."""
     if APPLY_WORDS.search(named):
         return Verdict("ask", "`config apply` writes the project file, which decides who pushes "
                               "what. It runs only if the user confirms.")
-    own = [config.project_file(pcwd)] if pcwd else []
-    mine = [PROJECT_FILE.pattern, re.escape(config.home()) + r"/[^/\s'\"]+/project\.json"] + [
-        re.escape(p) for p in own + [ROOT, os.path.realpath(ROOT)]]
-    return Verdict("ask", CONFIG_ASK) if sw.writes_to(named, mine) else None
+    mine = [CREW_HOME, re.escape(config.home())] + [re.escape(p) for p in {ROOT, os.path.realpath(ROOT)}]
+    if sw.writes_to(named, mine) or any(re.search(p, c) for c in inline_code(toks) for p in mine):
+        return Verdict("ask", CONFIG_ASK)
+    return None
 
 
 def git_rules(toks, cwd, table):
@@ -186,6 +191,26 @@ def gh_release(toks, cwd, table):
     return None
 
 
+def crew_shape(cmd, toks, named_toks, cwd, event, pcwd):
+    """The verdict for a line that names the plugin's scripts: (decided, verdict). Only a
+    configured project is held to the exact shapes; elsewhere only `config apply` is asked about
+    (by configuration)."""
+    if pcwd is None or not shapes.names_scripts(named_toks, cwd, SCRIPTS):
+        return False, None
+    shape = shapes.classify(cmd, CREW_PATHS)
+    if shape is None:
+        if shapes.reader_only(toks, cmd):
+            return False, None
+        return True, Verdict("deny", "This line names the plugin's scripts but is not one of the "
+                                     "allowed shapes. " + shapes.ALLOWED)
+    if shape.kind == "door":
+        return True, settle(door(shape, event, repos.read(pcwd)), pcwd)
+    if shape.kind == "apply":
+        return True, settle(Verdict("ask", "`config apply` writes the project file, which decides "
+                                           "who pushes what. It runs only if the user confirms."), pcwd)
+    return True, None
+
+
 def check_bash(event):
     """The configuration's protection does not depend on the folder being configured: the file
     that grants pushes is guarded before it exists. The git rules need a project."""
@@ -195,10 +220,12 @@ def check_bash(event):
     cmd = (event.get("tool_input") or {}).get("command") or ""
     cwd = event.get("cwd") or os.getcwd()
     toks = sw.tokens(cmd)
-    named = " ".join(sw.without_messages(toks))
-    if pcwd and DOOR_WORDS.search(named):
-        return settle(door(cmd.strip(), event, repos.read(pcwd)), pcwd)
-    found = configuration(named, pcwd)
+    named_toks = list(sw.without_messages(toks))
+    named = " ".join(named_toks)
+    decided, verdict = crew_shape(cmd, toks, named_toks, cwd, event, pcwd)
+    if decided:
+        return verdict
+    found = configuration(named, named_toks, pcwd)
     if found:
         return settle(found, pcwd)
     if pcwd is None:
@@ -218,6 +245,12 @@ def norm(path, cwd):
     return os.path.realpath(path if os.path.isabs(path) else os.path.join(cwd, path)).lower()
 
 
+def lexical(path, cwd):
+    """The path as written, ~ and .. resolved, no symlink followed."""
+    path = os.path.expanduser(path)
+    return os.path.normpath(path if os.path.isabs(path) else os.path.join(cwd, path)).lower()
+
+
 def check_files(event):
     if event.get("tool_name") not in WRITERS:
         return None
@@ -226,12 +259,16 @@ def check_files(event):
     raw = ti.get("file_path") or ti.get("notebook_path") or ti.get("path") or ""
     if not raw:
         return None
-    path = norm(raw, event.get("cwd") or os.getcwd())
-    crew = os.path.realpath(config.home()).lower()
-    plugin = os.path.realpath(ROOT).lower()
-    ours = (os.path.basename(path) == "project.json" and os.path.dirname(os.path.dirname(path)) == crew) \
-        or path == plugin or path.startswith(plugin + os.sep)
-    return settle(Verdict("ask", CONFIG_ASK), pcwd) if ours else None
+    cwd = event.get("cwd") or os.getcwd()
+    homes = [os.path.normpath(config.home()).lower(), os.path.realpath(config.home()).lower()]
+    plugins = [os.path.normpath(ROOT).lower(), os.path.realpath(ROOT).lower()]
+    # Either spelling counts: a symlinked folder pointing out of the home, or one pointing in.
+    for path in (lexical(raw, cwd), os.path.realpath(os.path.join(cwd, os.path.expanduser(raw))).lower()):
+        in_home = os.path.basename(path) == "project.json" and any(path.startswith(h + os.sep) for h in homes)
+        in_plugin = any(path == d or path.startswith(d + os.sep) for d in plugins)
+        if in_home or in_plugin:
+            return settle(Verdict("ask", CONFIG_ASK), pcwd)
+    return None
 
 
 def emit(verdict):

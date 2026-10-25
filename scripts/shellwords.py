@@ -119,4 +119,4 @@ def writes_to(named, patterns):
     if not any(re.search(p, named) for p in patterns):
         return False
     return bool(VERBS.search(named)) or any(
-        re.search(r">>?\s*['\"]?\S*" + p, named) for p in patterns)
+        re.search(r"(?:&\s*>|>>|>\s*\||>)\s*['\"]?\S*" + p, named) for p in patterns)

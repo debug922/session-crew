@@ -28,7 +28,7 @@ class Files(GuardCase):
     def test_drafts_handovers_and_the_rest_are_ordinary(self):
         folder = config.project_dir(self.work)
         for path in [os.path.join(folder, "drafts", "d.json"), os.path.join(folder, "boss", "h.md"),
-                     os.path.join(config.home(), "project.json"), os.path.join(self.work, "project.json"),
+                     os.path.join(self.work, "project.json"),
                      os.path.join(self.work, "core", "a.txt"), guard.ROOT + "-old/x.py"]:
             self.assertIsNone(self.files("Write", file_path=path, content="x"), path)
 

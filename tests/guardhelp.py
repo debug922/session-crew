@@ -29,7 +29,8 @@ class GuardCase(CrewCase):
             sh(os.path.join(self.work, rel), "git", "init", "-q", "-b", "main")
         sh(self.work + "/core", "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
            "--allow-empty", "-m", "Start")
-        self.wt = os.path.join(os.path.realpath(self.tmp), "wt")
+        self.wt = os.path.join(self.work, "wt")
+        os.makedirs(os.path.join(self.work, "plain"))
         sh(self.work + "/core", "git", "worktree", "add", "-q", "--detach", self.wt)
         self.entries = [self.entry("core", ["boss"], tags={"version": "changelog", "annotated": False}),
                         self.entry("lib", ["boss", "helper"]),
