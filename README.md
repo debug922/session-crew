@@ -3,7 +3,7 @@
 Hand a long-lived Claude Code session over to a fresh conversation before its transcript grows too
 large. `/handoff` writes the handover, `/clear` empties the conversation, `/migrate` resumes from
 the handover. A Claude Code plugin (skills and hooks); the same skills can be read by GitHub Copilot
-in VS Code.
+in VS Code. Since 0.2 it also carries a project's git flow, configured in chat with `/setup`.
 
 ## Why
 
@@ -33,14 +33,18 @@ would run.
 | `/handoff` | writes this session's handover: the work under way, your last requests and decisions in your words, what remains, where things are | when the size hook tells you, or whenever you like |
 | `/migrate` | reads the pending handover, says who the session is and what comes next, and marks the handover used; with no handover, recovers from the old transcript | after `/clear`, in the same tab |
 | `/migrate <name>` | the same, and gives this session the old one's name first (see [the rename hook](#the-rename-hook)) | in a new tab of the same folder |
+| `/setup` | makes or changes the project's configuration in chat, with options to choose from, and writes it only on your yes | once per project, and when the workflow changes |
+| `/push <repo>` | pushes a linked repository's main through the door, after its checks (see [the git flow](#the-git-flow)) | when what is committed is ready |
+| `/release <repo> vX.Y.Z` | the same, and tags the release | when the version is written and committed |
 
-Each is also reachable by its full name, `/session-crew:handoff` and `/session-crew:migrate`, when
+Each is also reachable by its full name (`/session-crew:handoff`, `/session-crew:setup`, ...) when
 another plugin uses the same word. Under Copilot the same skills are read from `skills/*/SKILL.md`
 and the script takes `--name` and `--cwd` (see [Copilot](#copilot)).
 
-Without a command, three hooks act on their own: the size hook on every message (past `warn_mb`
+Without a command, five hooks act on their own: the size hook on every message (past `warn_mb`
 it tells the session to hand over), the start hook after `/clear` or at startup (it announces a
-pending handover), and the rename hook (only on a prompt that is exactly `/migrate <name>`).
+pending handover), the rename hook (only on a prompt that is exactly `/migrate <name>`), and the two
+guards of [the git flow](#the-git-flow), which say nothing in a folder with no project file.
 
 ## Use
 
@@ -71,6 +75,10 @@ Optional, in `~/.session-crew/<slug>/project.json`; a missing or partial file gi
 | `tell_user_mb` | `800` | size at which you are told too |
 | `unattended` | none | the unattended-night block below; without it there is no night logic |
 | `sessions` | none | `{"name", "role", "owns"}` entries `/migrate` prints for the session |
+| `commit_rules` | none | what the door refuses in the messages of the commits it pushes: `{"no_coauthor": true, "forbid": [characters]}`, the characters written as JSON escapes |
+| `repos` | none | the table of linked repositories the door and the guards read (below) |
+
+`/setup` writes this file for you; `crew.py config show` prints it and what it lacks.
 
 The `unattended` block is for a long run you leave alone (a night):
 
@@ -84,6 +92,46 @@ The `unattended` block is for a long run you leave alone (a night):
 - `modes` (default `["auto", "dontAsk", "bypassPermissions"]`): the permission modes fit for a
   night. If the prompt starts a night in another mode (`default`, `plan`, `acceptEdits`), you and
   the session are warned that a permission request would stop the run until the morning.
+
+## The git flow
+
+For a project that links git repositories (`repos` in its file) the plugin gives its sessions one
+door: `/push <repo>` and `/release <repo> vX.Y.Z` run `crew.py push` and `crew.py tag`. Each entry
+of `repos` is `{"name", "path", "github", "visibility", "pushers", "checks", "tags"}`:
+
+- `github` is `owner/name`; only GitHub's repositories can be linked, since the door asks GitHub
+  (without credentials) whether a repository the table calls `private` still is. `visibility` is
+  `private` or `public`; a public push asks you first.
+- `pushers` are the session names (the ones you gave) that may push it; an agent never does.
+- `checks` run in a clean worktree of HEAD before a push: a preset (`go`: vet, test, govulncheck;
+  `unittest`; `frontend`: typecheck and tests when `frontend/` changed) or an object
+  `{"run": [argv], "in": "dir", "when_changed": "dir", "in_repo": false}`.
+- `tags` is `null` (the tags are yours) or `{"version": "changelog" or "file", "annotated": bool}`:
+  where the version is written, and the tag's style. Only the next patch or minor of the last tag
+  with the same X is accepted, on main's line, never moved.
+
+Before anything leaves, the door checks that main is checked out, origin is the table's repository,
+main goes onto origin/main by fast-forward, the commits meet `commit_rules`, and the checks pass.
+Each run is in `~/.session-crew/<slug>/releases.log`.
+
+The guard (PreToolUse, for Bash and for the file tools) holds the rest, for the project of the
+event's folder and only there:
+
+- the door's line runs only by the plugin's own path, alone on its line, from a session the table
+  names as a pusher; a public repository asks you;
+- `git push` in a repository of the table is refused (use `/push`); in a repository outside it,
+  or where nothing is linked, the guard says nothing; `git tag` that creates or deletes a tag in a
+  table repository is refused;
+- a push that deletes or rewrites on the remote (`--force`, `--delete`, a refspec with `+` or `:`,
+  `--mirror`, `--prune`), a `gh` command that deletes, a DELETE to GitHub's API: asks you;
+- `config apply`, any other write to `project.json`, and any write into the plugin's folder: asks you;
+- while a night is on (`unattended.status_command`) every ask is a refusal, since nobody is there.
+
+**A folder with no `project.json` gets nothing**: the guards do not act, `/push` has no table. What
+you want everywhere (your punctuation, your secrets) stays in your own hooks; a plugin's guard can
+add asks and refusals but never loosen yours (deny wins). The guard catches mistakes, not a determined
+bypass, and a running tab sees it only after `/reload-plugins`. Under Copilot there is no guard and
+no door: `/setup` works there, and its write needs a typed `yes` in your own terminal.
 
 ## The rename hook
 

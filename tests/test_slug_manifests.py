@@ -55,7 +55,7 @@ class Manifests(unittest.TestCase):
 
     def test_plugin_and_marketplace(self):
         plugin = self.load(".claude-plugin", "plugin.json")
-        self.assertEqual((plugin["name"], plugin["version"]), ("session-crew", "0.1.0"))
+        self.assertEqual((plugin["name"], plugin["version"]), ("session-crew", "0.2.0"))
         market = self.load(".claude-plugin", "marketplace.json")
         self.assertEqual(market["name"], "session-crew")
         self.assertEqual([(p["name"], p["source"]) for p in market["plugins"]],
