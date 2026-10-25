@@ -127,11 +127,11 @@ event's folder and only there:
 - `config apply`, any other write to `project.json`, and any write into the plugin's folder: asks you;
 - while a night is on (`unattended.status_command`) every ask is a refusal, since nobody is there.
 
-**A folder with no `project.json` gets nothing**: the guards do not act, `/push` has no table. What
+**A folder with no `project.json` gets no git rules**: `/push` has no table and the guard says nothing about pushes and tags. The configuration itself is guarded everywhere: `config apply`, any write to a `~/.session-crew/*/project.json` (existing or not) and any write into the plugin's folder ask you, since that file is what grants pushes. What
 you want everywhere (your punctuation, your secrets) stays in your own hooks; a plugin's guard can
 add asks and refusals but never loosen yours (deny wins). The guard catches mistakes, not a determined
 bypass, and a running tab sees it only after `/reload-plugins`. Under Copilot there is no guard and
-no door: `/setup` works there, and its write needs a typed `yes` in your own terminal.
+no door: `/setup` works there, and `config apply` outside Claude Code prints the line for you to run in your own terminal, where it asks for a typed `yes`; it refuses when stdin is not a terminal.
 
 ## The rename hook
 

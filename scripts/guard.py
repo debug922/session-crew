@@ -56,7 +56,8 @@ class Verdict:
 
 def settle(verdict, pcwd):
     """An ask becomes a deny while a night is on."""
-    if verdict and verdict.kind == "ask" and size.unattended_active(config.load_project(pcwd)):
+    if verdict and verdict.kind == "ask" and pcwd \
+            and size.unattended_active(config.load_project(pcwd)):
         return Verdict("deny", verdict.reason + NIGHT)
     return verdict
 
@@ -133,8 +134,9 @@ def configuration(named, pcwd):
     if APPLY_WORDS.search(named):
         return Verdict("ask", "`config apply` writes the project file, which decides who pushes "
                               "what. It runs only if the user confirms.")
-    mine = [PROJECT_FILE.pattern] + [re.escape(p) for p in
-                                     (config.project_file(pcwd), ROOT, os.path.realpath(ROOT))]
+    own = [config.project_file(pcwd)] if pcwd else []
+    mine = [PROJECT_FILE.pattern, re.escape(config.home()) + r"/[^/\s'\"]+/project\.json"] + [
+        re.escape(p) for p in own + [ROOT, os.path.realpath(ROOT)]]
     return Verdict("ask", CONFIG_ASK) if sw.writes_to(named, mine) else None
 
 
@@ -185,18 +187,24 @@ def gh_release(toks, cwd, table):
 
 
 def check_bash(event):
-    pcwd = find_project(event)
-    if pcwd is None or event.get("tool_name") != "Bash":
+    """The configuration's protection does not depend on the folder being configured: the file
+    that grants pushes is guarded before it exists. The git rules need a project."""
+    if event.get("tool_name") != "Bash":
         return None
+    pcwd = find_project(event)
     cmd = (event.get("tool_input") or {}).get("command") or ""
     cwd = event.get("cwd") or os.getcwd()
     toks = sw.tokens(cmd)
     named = " ".join(sw.without_messages(toks))
+    if pcwd and DOOR_WORDS.search(named):
+        return settle(door(cmd.strip(), event, repos.read(pcwd)), pcwd)
+    found = configuration(named, pcwd)
+    if found:
+        return settle(found, pcwd)
+    if pcwd is None:
+        return None
     table = repos.read(pcwd)
-    if DOOR_WORDS.search(named):
-        return settle(door(cmd.strip(), event, table), pcwd)
-    for found in (configuration(named, pcwd),
-                  Verdict("ask", "This deletes something on GitHub, which goes only on the user's "
+    for found in (Verdict("ask", "This deletes something on GitHub, which goes only on the user's "
                                  "explicit request. It runs only if he confirms.")
                   if sw.github_deletes(cmd, toks) else None,
                   git_rules(toks, cwd, table), gh_release(toks, cwd, table)):
@@ -211,9 +219,9 @@ def norm(path, cwd):
 
 
 def check_files(event):
-    pcwd = find_project(event)
-    if pcwd is None or event.get("tool_name") not in WRITERS:
+    if event.get("tool_name") not in WRITERS:
         return None
+    pcwd = find_project(event)
     ti = event.get("tool_input") or {}
     raw = ti.get("file_path") or ti.get("notebook_path") or ti.get("path") or ""
     if not raw:

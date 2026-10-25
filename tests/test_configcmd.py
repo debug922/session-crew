@@ -161,13 +161,20 @@ class Apply(Base):
         self.assertIn("nothing changes", out)
         self.assertFalse(os.path.exists(config.project_file(CWD) + ".prev"))
 
-    def test_outside_claude_code_a_typed_yes_is_needed(self):
+    def test_outside_claude_code_it_writes_only_from_a_terminal_with_a_typed_yes(self):
         ident = Identity(cwd=CWD)
-        rc, out, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: "no")
+        rc, _, err = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: "yes",
+                              tty=lambda: False)
+        self.assertEqual(rc, 1)
+        self.assertIn("own terminal", err)
+        self.assertIn("config apply d.json --cwd", err)
+        self.assertFalse(os.path.exists(config.project_file(CWD)))
+        rc, out, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: "no",
+                              tty=lambda: True)
         self.assertEqual(rc, 1)
         self.assertIn("nothing written", out)
-        self.assertFalse(os.path.exists(config.project_file(CWD)))
-        rc, _, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: " Yes ")
+        rc, _, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: " Yes ",
+                            tty=lambda: True)
         self.assertEqual(rc, 0)
         self.assertEqual(project.read_current(CWD), self.GOOD)
 

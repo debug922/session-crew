@@ -58,6 +58,11 @@ class Pushes(GuardCase):
 
 
 class Deletes(GuardCase):
+    def test_the_project_is_found_from_a_subfolder_and_from_the_sessions_own_folder(self):
+        self.assertEqual(self.bash("git push --force", cwd=self.work + "/core/deeper/still"), "ask")
+        self.assertEqual(self.bash("git push --force", cwd="/elsewhere"), "ask")  # the registry's cwd
+        self.assertIsNone(self.bash("git push --force", cwd="/elsewhere", sid="s-unknown"))
+
     def test_a_push_that_deletes_or_rewrites_on_the_remote_asks_anywhere_in_a_project(self):
         for cmd in DELETES:
             self.assertEqual(self.bash(cmd), "ask", cmd)
@@ -116,21 +121,29 @@ class Configuration(GuardCase):
 
 
 class NoProject(GuardCase):
-    def test_a_folder_with_no_project_file_is_left_alone_for_every_rule(self):
-        os.remove(config.project_file(self.work))
-        cmds = (PUSHES + DELETES + GITHUB + ["git tag v1", "gh release create v1",
-                                             self.door + "push lib", self.door + "config apply d.json",
-                                             "echo {} > %s" % config.project_file(self.work)])
+    def setUp(self):
+        super().setUp()
+        self.file = config.project_file(self.work)
+        os.remove(self.file)
+
+    def test_the_git_rules_say_nothing_in_a_folder_with_no_project_file(self):
+        cmds = PUSHES + DELETES + GITHUB + ["git tag v1", "gh release create v1", self.door + "push lib"]
         for cmd in cmds:
             self.assertIsNone(self.bash(cmd, cwd=self.work + "/core"), cmd)
-        for tool in ("Write", "Edit"):
-            self.assertIsNone(self.files(tool, file_path=config.project_file(self.work), content="x"))
-            self.assertIsNone(self.files(tool, file_path=guard.ROOT + "/scripts/guard.py", content="x"))
 
-    def test_the_project_is_found_from_a_subfolder_and_from_the_sessions_own_folder(self):
-        self.assertEqual(self.bash("git push --force", cwd=self.work + "/core/deeper/still"), "ask")
-        self.assertEqual(self.bash("git push --force", cwd="/elsewhere"), "ask")  # the registry's cwd
-        self.assertIsNone(self.bash("git push --force", cwd="/elsewhere", sid="s-unknown"))
+    def test_the_file_that_grants_pushes_is_guarded_before_it_exists(self):
+        for cmd in [self.door + "config apply d.json", "echo {} > %s" % self.file,
+                    "cp t.json %s" % self.file, "tee %s" % self.file,
+                    "cp t.json ~/.session-crew/-x-y/project.json",
+                    "cp x.py %s/scripts/guard.py" % guard.ROOT]:
+            self.assertEqual(self.bash(cmd, cwd=self.work + "/core"), "ask", cmd)
+        self.assertEqual(self.files("Write", file_path=self.file, content="{}"), "ask")
+        self.assertEqual(self.files("Write", file_path=guard.ROOT + "/scripts/door.py"), "ask")
+        self.assertIsNone(self.files("Write", file_path=self.work + "/a.txt", content="x"))
+
+    def test_and_a_session_cannot_grant_itself_the_door(self):
+        self.assertEqual(self.bash(self.door + "push lib"), None)  # no table, no guard; the door refuses
+        self.assertEqual(self.bash("echo '{\"repos\": []}' > " + self.file), "ask")
 
 
 class Wiring(GuardCase):

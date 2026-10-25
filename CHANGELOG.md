@@ -11,7 +11,7 @@
   fast-forward, the visibility and commit-rules checks, the tag rules, and a log.
 - PreToolUse guards for Bash and the file tools: the door's line and session, `git push` and
   `git tag` in the table's repositories, remote and GitHub deletes, writes to the configuration;
-  every ask is a refusal while a night is on; nothing is said in a folder with no project file.
+  every ask is a refusal while a night is on; the git rules say nothing in a folder with no project file, but the configuration's protection does not depend on it.
 - Fix: a session id with two registry files takes the one whose pid is alive, then the newest.
 
 ## 0.1.0 (unreleased)

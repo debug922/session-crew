@@ -92,15 +92,12 @@ def discover(ident):
     return 0
 
 
-def confirmed(ask):
-    if not sys.stdin.isatty() and ask is input:
-        print("refused: outside Claude Code the write waits for a typed answer, and there is no "
-              "terminal here. Run the same line in your own terminal.", file=sys.stderr)
-        return False
+def confirmed(ask, tty):
+    """A typed yes counts only from a terminal: a session can pipe `yes` into a script."""
     return ask("Type yes to write this file: ").strip().lower() == "yes"
 
 
-def apply(ident, draft, ask=input):
+def apply(ident, draft, ask=input, tty=lambda: os.isatty(0)):
     """Validate a draft, print what changes, keep the previous file, write the new one.
 
     Under Claude Code (a session in the registry) the guard has asked the user before this runs.
@@ -123,9 +120,17 @@ def apply(ident, draft, ask=input):
         print("nothing changes: the draft is the file as it is")
         return 0
     print("changes:\n  " + "\n  ".join(lines))
-    if ident.session_id is None and not confirmed(ask):
-        print("nothing written")
-        return 1
+    if ident.session_id is None:
+        if not tty():
+            print("refused: outside Claude Code nothing guards this write, so it is made only from "
+                  "a terminal (stdin is not one here). Run this line in your own terminal:\n  "
+                  "python3 -I %s config apply %s --cwd %s"
+                  % (os.path.join(os.path.dirname(os.path.abspath(__file__)), "crew.py"), draft, cwd),
+                  file=sys.stderr)
+            return 1
+        if not confirmed(ask, tty):
+            print("nothing written")
+            return 1
     project.write(cwd, data)
     print("written: %s (the previous file is project.json.prev)" % config.project_file(cwd))
     return 0
