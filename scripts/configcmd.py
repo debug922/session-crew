@@ -15,13 +15,13 @@ LACKS = (("repos", "no repositories are linked: the git flow is idle"),
          ("sessions", "no sessions named: /migrate prints no role"))
 
 
-def project_cwd(ident):
-    """The folder whose project this is: the nearest one with a project.json, else the session's."""
-    return config.locate(ident.cwd) or ident.cwd
+def project_cwd(cwd):
+    """The folder whose project this is: the nearest one with a project.json, else cwd itself."""
+    return config.locate(cwd) or cwd
 
 
-def show(ident):
-    cwd = project_cwd(ident)
+def show(cwd):
+    cwd = project_cwd(cwd)
     path = config.project_file(cwd)
     if not os.path.isfile(path):
         print("%s: no project file yet (%s). /setup makes one." % (cwd, path))
@@ -76,8 +76,8 @@ def named_sessions(folder):
     return [{"name": n, "alive": a} for n, a in sorted(best.items(), key=lambda kv: (not kv[1], kv[0]))]
 
 
-def discover(ident):
-    cwd = project_cwd(ident)
+def discover(cwd):
+    cwd = project_cwd(cwd)
     current = project.read_current(cwd)
     table = repos.read(cwd).entries or {}
     names = {os.path.realpath(e["path"]): n for n, e in table.items()}
@@ -92,18 +92,18 @@ def discover(ident):
     return 0
 
 
-def confirmed(ask, tty):
+def confirmed(ask):
     """A typed yes counts only from a terminal: a session can pipe `yes` into a script."""
     return ask("Type yes to write this file: ").strip().lower() == "yes"
 
 
-def apply(ident, draft, ask=input, tty=lambda: os.isatty(0)):
+def apply(cwd, draft, in_claude, ask=input, tty=lambda: os.isatty(0)):
     """Validate a draft, print what changes, keep the previous file, write the new one.
 
-    Under Claude Code (a session in the registry) the guard has asked the user before this runs.
-    Elsewhere (Copilot) there is no guard to stand between the session and the write, so the
-    script asks for a typed yes itself (V8)."""
-    cwd = project_cwd(ident)
+    in_claude is decided by the caller from the process ancestry alone, never from a flag. Under
+    Claude Code the guard has asked the user before this runs. Elsewhere (Copilot) no guard stands
+    between the session and the write, so it is made only from a terminal, with a typed yes (V8)."""
+    cwd = project_cwd(cwd)
     try:
         data = project.read_draft(cwd, draft)
     except ValueError as exc:
@@ -120,7 +120,7 @@ def apply(ident, draft, ask=input, tty=lambda: os.isatty(0)):
         print("nothing changes: the draft is the file as it is")
         return 0
     print("changes:\n  " + "\n  ".join(lines))
-    if ident.session_id is None:
+    if not in_claude:
         if not tty():
             print("refused: outside Claude Code nothing guards this write, so it is made only from "
                   "a terminal (stdin is not one here). Run this line in your own terminal:\n  "
@@ -128,7 +128,7 @@ def apply(ident, draft, ask=input, tty=lambda: os.isatty(0)):
                   % (os.path.join(os.path.dirname(os.path.abspath(__file__)), "crew.py"), draft, cwd),
                   file=sys.stderr)
             return 1
-        if not confirmed(ask, tty):
+        if not confirmed(ask):
             print("nothing written")
             return 1
     project.write(cwd, data)

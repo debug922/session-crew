@@ -4,6 +4,7 @@ One entry a repository: name, path (~ allowed), github (owner/name), visibility 
 public), pushers (session names), checks (presets or objects), tags (null or {version, annotated}).
 A table that cannot be read, or an entry not of this shape, refuses every door command.
 """
+import http.client
 import json
 import os
 import re
@@ -172,7 +173,7 @@ def github_status(github):
             return resp.status
     except urllib.error.HTTPError as exc:
         return exc.code
-    except urllib.error.URLError as exc:
+    except (urllib.error.URLError, http.client.HTTPException) as exc:
         raise OSError(str(exc))
 
 
@@ -180,6 +181,6 @@ def visibility_of(github):
     """private, public, or unknown (GitHub could not be asked, or answered something else)."""
     try:
         status = github_status(github)
-    except OSError:
+    except Exception:  # noqa: BLE001 - http.client errors, TLS, anything: unknown, never a crash
         return "unknown"
     return {404: "private", 200: "public"}.get(status, "unknown")

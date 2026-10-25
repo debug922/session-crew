@@ -1,4 +1,5 @@
 import contextlib
+import http.client
 import io
 import json
 import os
@@ -10,7 +11,6 @@ import config
 import configcmd
 import project
 import repos
-from registry import Identity
 
 
 def sh(cwd, *args):
@@ -44,19 +44,19 @@ class Base(CrewCase):
 
 class Show(Base):
     def test_no_file_says_so(self):
-        rc, out, _ = self.out(configcmd.show, Identity(cwd=CWD))
+        rc, out, _ = self.out(configcmd.show, CWD)
         self.assertIn("no project file yet", out)
 
     def test_a_file_is_shown_with_what_it_lacks(self):
         self.project(lang="en")
-        _, out, _ = self.out(configcmd.show, Identity(cwd=CWD))
+        _, out, _ = self.out(configcmd.show, CWD)
         self.assertIn('"lang": "en"', out)
         for word in ("repos", "commit_rules", "sessions"):
             self.assertIn("lacks " + word, out)
 
     def test_a_broken_field_is_named(self):
         self.project(warn_mb=-1)
-        _, out, _ = self.out(configcmd.show, Identity(cwd=CWD))
+        _, out, _ = self.out(configcmd.show, CWD)
         self.assertIn("problem: warn_mb", out)
 
 
@@ -77,7 +77,7 @@ class Discover(Base):
         sh(self.elsewhere, "git", "remote", "add", "origin", "git@github.com:o/other.git")
 
     def found(self):
-        _, out, _ = self.out(configcmd.discover, Identity(cwd=self.folder))
+        _, out, _ = self.out(configcmd.discover, self.folder)
         return json.loads(out)
 
     def test_repositories_two_levels_down_with_origin_and_visibility(self):
@@ -93,6 +93,13 @@ class Discover(Base):
         def down(_):
             raise OSError("offline")
         repos.github_status = down
+        by = {os.path.relpath(r["path"], self.folder): r for r in self.found()["repos_found"]}
+        self.assertEqual(by["a"]["visibility"], "unknown")
+
+    def test_any_error_asking_github_is_unknown_never_a_crash(self):
+        def broken(_):
+            raise http.client.RemoteDisconnected("closed")
+        repos.github_status = broken
         by = {os.path.relpath(r["path"], self.folder): r for r in self.found()["repos_found"]}
         self.assertEqual(by["a"]["visibility"], "unknown")
 
@@ -129,7 +136,7 @@ class Apply(Base):
 
     def test_a_draft_is_validated_shown_and_written_with_the_previous_kept(self):
         self.project(lang="it")
-        rc, out, _ = self.out(configcmd.apply, Identity(cwd=CWD, session_id="s1"), self.draft(self.GOOD))
+        rc, out, _ = self.out(configcmd.apply, CWD, self.draft(self.GOOD), True)
         self.assertEqual(rc, 0)
         self.assertIn('lang: "it" -> "en"', out)
         self.assertIn("repos core: added", out)
@@ -140,7 +147,7 @@ class Apply(Base):
     def test_an_invalid_draft_writes_nothing(self):
         self.project(lang="it")
         bad = dict(self.GOOD, repos=[{"name": "core"}])
-        rc, _, err = self.out(configcmd.apply, Identity(cwd=CWD, session_id="s1"), self.draft(bad))
+        rc, _, err = self.out(configcmd.apply, CWD, self.draft(bad), True)
         self.assertEqual(rc, 1)
         self.assertIn("not a project file", err)
         self.assertEqual(project.read_current(CWD)["lang"], "it")
@@ -149,31 +156,30 @@ class Apply(Base):
         outside = os.path.join(self.tmp, "x.json")
         with open(outside, "w") as f:
             json.dump(self.GOOD, f)
-        rc, _, err = self.out(configcmd.apply, Identity(cwd=CWD, session_id="s1"), outside)
+        rc, _, err = self.out(configcmd.apply, CWD, outside, True)
         self.assertEqual(rc, 1)
         self.assertIn("drafts", err)
         self.assertFalse(os.path.exists(config.project_file(CWD)))
 
     def test_a_draft_equal_to_the_file_changes_nothing(self):
         project.write(CWD, self.GOOD)
-        rc, out, _ = self.out(configcmd.apply, Identity(cwd=CWD, session_id="s1"), self.draft(self.GOOD))
+        rc, out, _ = self.out(configcmd.apply, CWD, self.draft(self.GOOD), True)
         self.assertEqual(rc, 0)
         self.assertIn("nothing changes", out)
         self.assertFalse(os.path.exists(config.project_file(CWD) + ".prev"))
 
     def test_outside_claude_code_it_writes_only_from_a_terminal_with_a_typed_yes(self):
-        ident = Identity(cwd=CWD)
-        rc, _, err = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: "yes",
+        rc, _, err = self.out(configcmd.apply, CWD, self.draft(self.GOOD), False, ask=lambda _: "yes",
                               tty=lambda: False)
         self.assertEqual(rc, 1)
         self.assertIn("own terminal", err)
         self.assertIn("config apply d.json --cwd", err)
         self.assertFalse(os.path.exists(config.project_file(CWD)))
-        rc, out, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: "no",
+        rc, out, _ = self.out(configcmd.apply, CWD, self.draft(self.GOOD), False, ask=lambda _: "no",
                               tty=lambda: True)
         self.assertEqual(rc, 1)
         self.assertIn("nothing written", out)
-        rc, _, _ = self.out(configcmd.apply, ident, self.draft(self.GOOD), ask=lambda _: " Yes ",
+        rc, _, _ = self.out(configcmd.apply, CWD, self.draft(self.GOOD), False, ask=lambda _: " Yes ",
                             tty=lambda: True)
         self.assertEqual(rc, 0)
         self.assertEqual(project.read_current(CWD), self.GOOD)
@@ -183,7 +189,29 @@ class Apply(Base):
         self.project(lang="it")
         self.draft(self.GOOD)
         for argv in (["config", "show"], ["config", "discover"]):
-            rc, _, _ = self.out(crew.main, argv + ["--cwd", CWD, "--session-id", "none"])
+            rc, _, _ = self.out(crew.main, argv + ["--cwd", CWD])
             self.assertEqual(rc, 0, argv)
         rc, _, err = self.out(crew.main, ["config", "apply", "--cwd", CWD])
         self.assertEqual(rc, 2)
+
+    def test_who_is_calling_comes_from_the_process_ancestry_never_from_a_flag(self):
+        import crew
+        import unittest.mock
+        self.draft(self.GOOD)
+        for flag in (["--session-id", "s1"], ["--name", "boss"]):
+            with self.assertRaises(SystemExit):
+                self.out(crew.main, ["config", "apply", "d.json", "--cwd", CWD] + flag)
+        for flag in (["--session-id", "s1"], ["--name", "boss"]):
+            for cmd in (["push", "lib"], ["tag", "lib", "v0.1.0"]):
+                with self.assertRaises(SystemExit):
+                    self.out(crew.main, cmd + flag)
+        # No Claude Code above this process: a terminal is needed, and stdin here is not one.
+        with unittest.mock.patch("registry.find_by_ancestry", return_value=None):
+            rc, _, err = self.out(crew.main, ["config", "apply", "d.json", "--cwd", CWD])
+        self.assertEqual(rc, 1)
+        self.assertIn("own terminal", err)
+        self.assertFalse(os.path.exists(config.project_file(CWD)))
+        # A Claude Code ancestor is what lets it write (the guard has asked the user).
+        with unittest.mock.patch("registry.find_by_ancestry", return_value={"pid": 1, "sessionId": "s"}):
+            rc, _, _ = self.out(crew.main, ["config", "apply", "d.json", "--cwd", CWD])
+        self.assertEqual(rc, 0)

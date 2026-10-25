@@ -1,3 +1,4 @@
+import http.client
 import json
 import os
 
@@ -123,7 +124,9 @@ class Visibility(CrewCase):
             repos.github_status = lambda g, s=status: s
             self.assertEqual(repos.visibility_of("o/x"), want)
 
-        def down(_):
-            raise OSError("offline")
-        repos.github_status = down
-        self.assertEqual(repos.visibility_of("o/x"), "unknown")
+        for exc in (OSError("offline"), http.client.RemoteDisconnected("closed"),
+                    http.client.IncompleteRead(b"x"), ValueError("odd")):
+            def down(_, exc=exc):
+                raise exc
+            repos.github_status = down
+            self.assertEqual(repos.visibility_of("o/x"), "unknown", exc)

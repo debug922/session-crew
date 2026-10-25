@@ -27,6 +27,7 @@ import sys
 
 import checks
 import config
+import registry
 import repos
 import size
 from gitrun import Refused, git, is_ancestor
@@ -101,7 +102,7 @@ def why_not_private(github, status):
 def private_fault(github):
     try:
         return why_not_private(github, repos.github_status(github))
-    except OSError as exc:
+    except Exception as exc:  # noqa: BLE001
         return "GitHub could not be asked whether %s is still private (%s): nothing is pushed unchecked" % (github, exc)
 
 
@@ -114,7 +115,7 @@ def origin_faults(repo_dir, entry):
     return None
 
 
-def preflight(cwd, name, version):
+def preflight(cwd, name, version, caller, night):
     """The repository's state, checked before any build runs: (repo_dir, entry)."""
     try:
         table = repos.load(cwd)
@@ -125,6 +126,13 @@ def preflight(cwd, name, version):
                       "user's" % (name, ", ".join(table) or "empty"))
     entry = table[name]
     repo_dir = entry["path"]
+    # The guard checks these too; the door does not rely on it (a guard catches mistakes only).
+    if caller not in entry["pushers"]:
+        raise Refused("%s is pushed by %s; this session is %s" % (
+            name, ", ".join(entry["pushers"]) or "the user alone", caller or "not named by him"))
+    if night and entry["visibility"] == "public":
+        raise Refused("%s is public on GitHub: a push goes out only after the user's ok, and "
+                      "nobody is here to give it while a night is on" % name)
     if version and not entry["tags"]:
         raise Refused("%s's tags are the user's: the table gives it none" % name)
     if git(repo_dir, "symbolic-ref", "--short", "HEAD") != "main":
@@ -179,15 +187,17 @@ def publish(repo_dir, entry, version):
         raise
 
 
-def release(cwd, name, version, build=checks.run_checks):
-    """Pushes main and, with a version, tags HEAD: what was done, or Refused."""
-    repo_dir, entry = preflight(cwd, name, version)
+def release(cwd, name, version, caller, build=checks.run_checks):
+    """Pushes main and, with a version, tags HEAD for the session called `caller`: what was done,
+    or Refused."""
+    night = size.unattended_active(config.load_project(cwd))
+    repo_dir, entry = preflight(cwd, name, version, caller, night)
     head = git(repo_dir, "rev-parse", "--short", "HEAD")
     new = git(repo_dir, "rev-list", "--count", "origin/main..HEAD")
     if not version and new == "0":
         return "%s: nothing to push, origin/main is %s" % (name, head)
     since = (last_tag(repo_dir) if version else None) or "origin/main"
-    build(name, repo_dir, entry, since, size.unattended_active(config.load_project(cwd)))
+    build(name, repo_dir, entry, since, night)
     publish(repo_dir, entry, version)
     done = "%s: pushed %s commit(s), main at %s" % (name, new, head)
     return done + (", tagged " + version if version else "")
@@ -200,19 +210,29 @@ def log(cwd, line):
         fh.write("%s %s\n" % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), line))
 
 
-def run_command(ident, action, name, version=None):
-    """`crew.py push <repo>` and `crew.py tag <repo> vX.Y.Z`: exit 0 done, 1 refused."""
-    cwd = config.locate(ident.cwd)
-    if cwd is None:
-        print("refused: %s has no project file; /setup makes one" % ident.cwd, file=sys.stderr)
+def run_command(action, name, version=None, cwd=None):
+    """`crew.py push <repo>` and `crew.py tag <repo> vX.Y.Z`: exit 0 done, 1 refused.
+
+    The project is the one of the process's own folder and the caller is found from the process
+    ancestry alone, never from a flag or the registry's folder. No Claude Code session, no door
+    (under Copilot no guard can hold it, V8)."""
+    start = cwd or os.getcwd()
+    project = config.locate(start)
+    if project is None:
+        print("refused: %s has no project file; /setup makes one" % start, file=sys.stderr)
         return 1
     what = "%s %s%s" % (name, action, " " + version if version else "")
+    session = registry.find_by_ancestry()
     try:
-        done = release(cwd, name, version)
+        if session is None:
+            raise Refused("the door runs from a Claude Code session only: no session found above "
+                          "this process")
+        caller = session.get("name") if session.get("nameSource") == "user" else None
+        done = release(project, name, version, caller)
     except Refused as why:
-        log(cwd, "%s: refused: %s" % (what, str(why).splitlines()[0]))
+        log(project, "%s: refused: %s" % (what, str(why).splitlines()[0]))
         print("refused: %s" % why, file=sys.stderr)
         return 1
-    log(cwd, "%s: %s" % (what, done))
+    log(project, "%s: %s" % (what, done))
     print(done)
     return 0

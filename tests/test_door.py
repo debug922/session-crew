@@ -6,10 +6,13 @@ import json
 import os
 import subprocess
 import sys
+import unittest.mock
 
 from helpers import CWD, CrewCase
 
+import config
 import door
+import project
 import repos
 from gitrun import Refused
 from registry import Identity
@@ -110,8 +113,8 @@ class Repo(CrewCase):
         self.git(name, "add", file)
         self.git(name, "commit", "-q", "-m", message)
 
-    def release(self, name, version=None):
-        return door.release(CWD, name, version, build=lambda *a: self.built.append(a))
+    def release(self, name, version=None, caller="boss"):
+        return door.release(CWD, name, version, caller, build=lambda *a: self.built.append(a))
 
     def remote(self, name, *args):
         return sh(os.path.join(self.root, name + ".git"), "git", *args)
@@ -245,16 +248,72 @@ class Repo(CrewCase):
         def broken(*_):
             raise Refused("tests failed")
         with self.assertRaisesRegex(Refused, "tests failed"):
-            door.release(CWD, "lib", None, build=broken)
+            door.release(CWD, "lib", None, "boss", build=broken)
         self.assertEqual(self.remote("lib", "rev-list", "--count", "main"), "1")
+
+    def test_the_door_checks_the_caller_itself(self):
+        self.commit("lib", "a.txt", "a\n", "Add a")
+        for caller in ("helper", None, ""):
+            with self.assertRaisesRegex(Refused, "pushed by boss"):
+                self.release("lib", caller=caller)
+        self.assertEqual(self.built, [])
+
+    def test_a_public_repository_is_refused_while_a_night_is_on(self):
+        self.commit("site", "a.txt", "a\n", "Add a")
+        night = {"status_command": [sys.executable, "-c", "print('mode: night')"],
+                 "active_pattern": "^mode: night"}
+        self.project(repos=self.entries, unattended=night)
+        with self.assertRaisesRegex(Refused, "nobody is here"):
+            self.release("site")
+        self.project(repos=self.entries)  # by day the guard asks and the door goes on
+        self.assertIn("pushed 1 commit(s)", self.release("site"))
+
+    def run_cli(self, action, *args, cwd=CWD, session="boss"):
+        """The command's own path: caller from the ancestry (stubbed), project from the folder."""
+        entry = None if session is None else {"pid": 1, "name": session, "nameSource": "user",
+                                              "cwd": "/registry/says/another/folder"}
+        stderr = io.StringIO()
+        with unittest.mock.patch("registry.find_by_ancestry", return_value=entry), \
+                unittest.mock.patch("door.release", side_effect=lambda *a, **k: "done:%s" % (a[3],)), \
+                contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(stderr):
+            rc = door.run_command(action, *args, cwd=cwd)
+        return rc, out.getvalue(), stderr.getvalue()
+
+    def test_no_claude_code_session_above_the_process_is_no_door(self):
+        rc, _, err = self.run_cli("push", "lib", session=None)
+        self.assertEqual(rc, 1)
+        self.assertIn("Claude Code session only", err)
+
+    def test_the_session_that_calls_is_the_one_found_by_ancestry(self):
+        rc, out, _ = self.run_cli("push", "lib")
+        self.assertEqual((rc, out.strip()), (0, "done:boss"))
+        entry = {"pid": 1, "name": "boss", "nameSource": "derived"}
+        with unittest.mock.patch("registry.find_by_ancestry", return_value=entry), \
+                unittest.mock.patch("door.release", side_effect=lambda *a, **k: "done:%s" % (a[3],)), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            door.run_command("push", "lib", cwd=CWD)
+        self.assertEqual(out.getvalue().strip(), "done:None")  # a name that is not his is no name
+
+    def test_the_project_is_the_processs_folder_not_the_registrys(self):
+        other = os.path.join(self.tmp, "project-a")
+        os.makedirs(other)
+        project.write(other, {"repos": []})
+        mark = []
+        entry = {"pid": 1, "name": "boss", "nameSource": "user", "cwd": other}  # the registry says A
+        with unittest.mock.patch("registry.find_by_ancestry", return_value=entry), \
+                unittest.mock.patch("door.release", side_effect=lambda cwd, *a, **k: mark.append(cwd) or "ok"), \
+                contextlib.redirect_stdout(io.StringIO()):
+            door.run_command("push", "lib", cwd=CWD)  # the process is in B (CWD)
+        self.assertEqual(mark, [CWD])
+        self.assertTrue(os.path.exists(os.path.join(self.crew_home, "-work-proj", "releases.log")))
+        self.assertFalse(os.path.exists(os.path.join(config.project_dir(other), "releases.log")))
 
     def test_every_run_is_logged_beside_the_project_file(self):
         self.commit("lib", "a.txt", "a\n", "Add a")
-        ident = Identity("boss", "s1", CWD)
         with contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(door.run_command(ident, "tag", "lib", "v9.0.0"), 1)
-            self.assertEqual(door.run_command(Identity("boss", "s1", "/elsewhere/x"), "push", "lib"), 1)
+            self.assertEqual(self.run_cli("tag", "lib", "v9.0.0", session="helper")[0], 0)  # stub release
+            self.assertEqual(door.run_command("push", "lib", cwd="/elsewhere/x"), 1)
         with open(os.path.join(self.crew_home, "-work-proj", "releases.log"), encoding="utf-8") as fh:
             text = fh.read()
-        self.assertIn("lib tag v9.0.0: refused:", text)
+        self.assertIn("lib tag v9.0.0: done:helper", text)
         self.assertEqual(text.count("\n"), 1)  # the folder with no project file logged nothing
