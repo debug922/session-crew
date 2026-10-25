@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import unittest.mock
 
 from helpers import CrewCase
 
@@ -21,12 +22,18 @@ def sh(cwd, *args):
 class GuardCase(CrewCase):
     def setUp(self):
         super().setUp()
+        # The user's own git configuration (aliases, insteadOf) must not reach the tests.
+        patch = unittest.mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": os.devnull,
+                                                      "GIT_CONFIG_NOSYSTEM": "1"})
+        patch.start()
+        self.addCleanup(patch.stop)
         self.work = os.path.join(os.path.realpath(self.tmp), "work")
         self.plugin = guard.ROOT
         self.door = 'python3 -I "%s" ' % guard.CREW
         for rel in ("core", "lib", "site", "other"):
             os.makedirs(os.path.join(self.work, rel))
             sh(os.path.join(self.work, rel), "git", "init", "-q", "-b", "main")
+        sh(self.work + "/other", "git", "remote", "add", "origin", "git@github.com:x/other.git")
         sh(self.work + "/core", "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
            "--allow-empty", "-m", "Start")
         self.wt = os.path.join(self.work, "wt")
@@ -37,6 +44,9 @@ class GuardCase(CrewCase):
                         self.entry("site", ["boss"], visibility="public")]
         self.table()
         self.session(100, "s-boss", "boss", cwd=self.work)
+
+    def git(self, repo, *args):
+        sh(os.path.join(self.work, repo), "git", *args)
 
     def entry(self, name, pushers, visibility="private", tags=None):
         return {"name": name, "path": os.path.join(self.work, name), "github": "o/" + name,

@@ -146,18 +146,16 @@ def check_bash(event):
     if pcwd is None:
         return None
     table = repos.read(pcwd)
+    texts = [toks] + [sw.tokens(t) for t in sw.nested_texts(cmd)]
+    lost = gitguard.blind(texts)
     for found in (Verdict("ask", "This deletes something on GitHub, which goes only on the user's "
                                  "explicit request. It runs only if he confirms.")
                   if sw.github_deletes(cmd, toks) else None,
-                  gitguard.git_rules(toks, cwd, table), gitguard.gh_release(toks, cwd, table)):
+                  *(gitguard.git_rules(t, cwd, table, lost) for t in texts),
+                  *(gitguard.gh_release(t, cwd, table, lost) for t in texts)):
         if found:
             return settle(found, pcwd)
     return None
-
-
-def norm(path, cwd):
-    path = os.path.expanduser(path)
-    return os.path.realpath(path if os.path.isabs(path) else os.path.join(cwd, path)).lower()
 
 
 def lexical(path, cwd):

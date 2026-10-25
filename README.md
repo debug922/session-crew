@@ -114,24 +114,50 @@ Before anything leaves, the door checks that main is checked out, origin is the 
 main goes onto origin/main by fast-forward, the commits meet `commit_rules`, and the checks pass.
 Each run is in `~/.session-crew/<slug>/releases.log`.
 
-The guard (PreToolUse, for Bash and for the file tools) holds the rest, for the project of the
-event's folder and only there:
+The door does not trust the guard. It finds its caller by the process ancestry (never by a flag: it
+takes no `--name` or `--session-id`), refuses when no Claude Code session is above it, refuses a
+session that is not among the repository's pushers, finds the project from the process's own
+folder, and refuses a public repository while a night is on. Only two things are the guard's alone:
+that an agent never opens the door, and the ask before a public push by day.
 
-- the door's line runs only by the plugin's own path, alone on its line, from a session the table
-  names as a pusher; a public repository asks you;
-- `git push` in a repository of the table is refused (use `/push`); in a repository outside it,
-  or where nothing is linked, the guard says nothing; `git tag` that creates or deletes a tag in a
-  table repository is refused;
+The guard (PreToolUse, for Bash and for the file tools) holds the rest, for the project of the
+event's folder:
+
+- any line that names the plugin's `crew.py`, a word under its `scripts/` folder, or a glob that
+  could match one there, must be exactly one of the allowed shapes (the door lines, `config
+  show|discover|apply`, and v1's own `handoff`, `migrate`, `recover`, `size` and `hook` forms),
+  alone on its line by the plugin's own path, with no env prefix, `bash -c`, `$(...)` or extra
+  words; anything else is refused and the refusal lists the shapes. A plain read (`cat`, `grep`,
+  `ls`) of the scripts is free. The door's line also needs a session the table names as a pusher,
+  never an agent; a public repository asks you;
+- in a project with a table, `git push` passes only when the guard places the repository (no `cd`,
+  env prefix, `--git-dir` or `--work-tree`), it is not in the table, and every place the push goes
+  resolves to a URL (read from the repository's configuration now, `insteadOf` applied) that is not
+  a table repository's; anything it cannot resolve, a remote added in the same line included, is
+  refused. `git tag` that creates or deletes a tag in a table repository is refused. Git is also
+  looked for inside `bash -lc '...'`, heredocs that feed a shell, `$(...)`, backticks and aliases
+  (and defining an alias that hides a push or a tag is refused);
 - a push that deletes or rewrites on the remote (`--force`, `--delete`, a refspec with `+` or `:`,
   `--mirror`, `--prune`), a `gh` command that deletes, a DELETE to GitHub's API: asks you;
-- `config apply`, any other write to `project.json`, and any write into the plugin's folder: asks you;
+- `config apply`, any write (a verb, a redirection, inline interpreter code, or a file tool) to
+  anything under `~/.session-crew`, to a `project.json` there (by its path as written or its real
+  one), and any write into the plugin's folder: asks you. Reading is free;
 - while a night is on (`unattended.status_command`) every ask is a refusal, since nobody is there.
 
-**A folder with no `project.json` gets no git rules**: `/push` has no table and the guard says nothing about pushes and tags. The configuration itself is guarded everywhere: `config apply`, any write to a `~/.session-crew/*/project.json` (existing or not) and any write into the plugin's folder ask you, since that file is what grants pushes. What
-you want everywhere (your punctuation, your secrets) stays in your own hooks; a plugin's guard can
-add asks and refusals but never loosen yours (deny wins). The guard catches mistakes, not a determined
-bypass, and a running tab sees it only after `/reload-plugins`. Under Copilot there is no guard and
-no door: `/setup` works there, and `config apply` outside Claude Code prints the line for you to run in your own terminal, where it asks for a typed `yes`; it refuses when stdin is not a terminal.
+**A folder with no `project.json` gets no git rules and no shape rules**: `/push` has no table and
+the guard says nothing about pushes, tags or the scripts. The configuration itself is guarded
+everywhere: `config apply` and writes to the crew home or the plugin's folder ask you, since that
+file is what grants pushes. What you want everywhere (your punctuation, your secrets) stays in your
+own hooks; a plugin's guard can add asks and refusals but never loosen yours (deny wins).
+
+**What the guard is.** It stops mistakes and the common forms of them. A session set on getting
+round it can, with a script of its own (a heredoc fed to an interpreter, a program it wrote). What
+is left is the door's own checks, which do not depend on the guard, and your rule against working
+around a guard. A running tab sees the guard only after `/reload-plugins`.
+
+Under Copilot there is no guard and no door: `/setup` works there, and `config apply` outside Claude
+Code (decided by the process ancestry alone) prints the line for you to run in your own terminal. It
+writes only when stdin is a terminal and you type `yes`, and refuses otherwise.
 
 ## The rename hook
 

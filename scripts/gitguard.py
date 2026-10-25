@@ -1,6 +1,10 @@
 """The git rules of the Bash guard: where a git call acts, and what a push or a tag may do."""
 import os
+import re
+import shlex
 
+import pushdest
+import repos
 import shellwords as sw
 from verdict import Verdict
 
@@ -33,28 +37,109 @@ def names_repo(table, top):
     return any(os.path.realpath(e["path"]) == top for e in table.entries.values())
 
 
-def where(toks, opts, cwd):
-    """The repository a git call acts on, or None when it cannot be told (a cd, --git-dir)."""
-    if any(os.path.basename(t) in ("cd", "pushd") for t in toks):
-        return None
-    start = sw.git_start_dir(opts, cwd)
+KNOWN = {"push", "tag", "commit", "status", "log", "diff", "add", "checkout", "fetch", "pull", "merge",
+         "rebase", "branch", "show", "clone", "init", "remote", "config", "worktree", "stash", "reset",
+         "cherry-pick", "rev-parse", "ls-remote", "describe", "switch", "restore", "rm", "mv", "apply",
+         "am", "bisect", "blame", "grep", "clean", "gc", "notes", "submodule", "archive", "revert"}
+PUSH_OR_TAG = re.compile(r"\b(?:push|tag)\b")
+CONFIG_KEYS = re.compile(r"(?:alias|url|remote)\.", re.IGNORECASE)
+GIT_ENV = re.compile(r"GIT_\w+=")
+
+
+def blind(texts_toks):
+    """True when a call's place cannot be told from the words: a cd or an env prefix such as
+    GIT_DIR or GIT_WORK_TREE in any of the command's lines."""
+    return any(os.path.basename(t) in ("cd", "pushd") or GIT_ENV.match(t)
+               for toks in texts_toks for t in toks)
+
+
+def place(opts, cwd, lost):
+    """The repository a git call acts on, or None when it cannot be told (a cd, an env prefix,
+    --git-dir, --work-tree)."""
+    start = None if lost else sw.git_start_dir(opts, cwd)
     return toplevel(start) if start else None
 
 
-def git_rules(toks, cwd, table):
-    for sub, args, opts in sw.git_calls(toks):
-        top = where(toks, opts, cwd)
-        outside = top is not None and not names_repo(table, top)
+def resolve_alias(sub, args, start):
+    """(sub, args) with git aliases of the repository expanded, read now; ("!", [shell text]) for
+    an alias that runs a shell command."""
+    for _ in range(3):
+        value = None if sub in KNOWN or not os.path.isdir(start) else pushdest.alias_value(start, sub)
+        if not value:
+            break
+        if value.startswith("!"):
+            return "!", [value[1:]] + args
+        try:
+            parts = shlex.split(value)
+        except ValueError:
+            break
+        if not parts:
+            break
+        sub, args = parts[0], parts[1:] + args
+    return sub, args
+
+
+def defines_alias(sub, opts, args):
+    """True for `git -c alias.x=...` (or url.*, remote.*) and `git config alias.x <push or tag>`."""
+    if any(o == "-c" and i + 1 < len(opts) and CONFIG_KEYS.match(opts[i + 1])
+           for i, o in enumerate(opts)):
+        return True
+    if sub == "config":
+        for i, a in enumerate(args):
+            if a.lower().startswith("alias.") and (PUSH_OR_TAG.search(" ".join(args[i:])) or "=" in a
+                                                    and PUSH_OR_TAG.search(a.partition("=")[2])):
+                return True
+    return False
+
+
+def push_verdict(args, top, table, subs):
+    """The refusal of a plain push in a configured project, or None when it is provably elsewhere:
+    placed, not a table repository, and every place it pushes to a URL that is not a table's."""
+    if top is None or names_repo(table, top):
+        return Verdict("deny", "git push runs through the door in this project: use /push <repo> "
+                               "(crew.py push). A repository outside the project's table is pushed "
+                               "from inside that repository, with no cd, env prefix or --git-dir.")
+    if "remote" in subs or "config" in subs:
+        return Verdict("deny", "This line changes remotes or configuration and pushes: the guard "
+                               "cannot tell where the push goes. Do them in separate commands.")
+    urls = pushdest.destinations(top, args)
+    if not urls:
+        return Verdict("deny", "The guard cannot resolve where this push goes (a remote that is not "
+                               "in the repository's configuration).")
+    mine = {e["github"].lower() for e in table.entries.values()}
+    if any(repos.github_of(u) in mine for u in urls):
+        return Verdict("deny", "This push goes to a repository of the project's table: use /push "
+                               "<repo> (crew.py push).")
+    return None
+
+
+def git_rules(toks, cwd, table, lost, depth=0):
+    calls = list(sw.git_calls(toks))
+    subs = [c[0] for c in calls]
+    for sub, args, opts in calls:
+        if defines_alias(sub, opts, args):
+            return Verdict("deny", "This defines a git alias, a url rewrite or a remote through -c or "
+                                   "git config in a way that could hide a push or a tag. Run git "
+                                   "push and git tag as themselves, through the door.")
+        start = sw.git_start_dir(opts, cwd) or cwd
+        sub, args = resolve_alias(sub, args, start)
+        if sub == "!":
+            inner = git_rules(sw.tokens(args[0]), cwd, table, lost, depth + 1) if depth < 3 else None
+            if inner:
+                return inner
+            continue
+        top = place(opts, cwd, lost)
         if sub == "push":
             if sw.push_deletes(args):
                 return Verdict("ask", "This push deletes or rewrites on the remote (--force, --delete, "
                                       "a refspec with + or :, --mirror, --prune), which goes only on "
                                       "the user's explicit request. It runs only if he confirms.")
-            if table.active and not outside:
-                return Verdict("deny", "git push runs through the door in this project: use /push "
-                                       "<repo> (crew.py push). A repository outside the project's "
-                                       "table is pushed from inside that repository, without cd.")
-        if sub == "tag" and table.active and sw.tag_writes(args) and not outside:
+            if table.active:
+                found = push_verdict(args, top, table, subs)
+                if found:
+                    return found
+        if sub == "tag" and table.active and sw.tag_writes(args) \
+                and (top is None or names_repo(table, top)):
             return Verdict("deny", "A tag is made through the door (/release <repo> vX.Y.Z) for a "
                                    "repository the table gives tags, and never moved or deleted; "
                                    "listing tags (git tag -l) is allowed.")
@@ -69,7 +154,7 @@ def repo_flag(toks):
     return None
 
 
-def gh_release(toks, cwd, table):
+def gh_release(toks, cwd, table, lost):
     """`gh release create` makes a tag: refused for a repository of the table (or one not told)."""
     for i, tok in enumerate(toks):
         if os.path.basename(tok) != "gh" or toks[i + 1:i + 3] != ["release", "create"] \
@@ -79,7 +164,7 @@ def gh_release(toks, cwd, table):
         if flag and table.entries is not None:
             named = flag in {e["github"].lower() for e in table.entries.values()}
         else:
-            top = where(toks, [], cwd)
+            top = place([], cwd, lost)
             named = top is None or names_repo(table, top)
         if named:
             return Verdict("deny", "gh release create makes a tag: tags go through the door "

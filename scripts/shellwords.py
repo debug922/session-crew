@@ -42,11 +42,16 @@ def without_messages(toks):
             yield t
 
 
+def _has_c(flag):
+    """True for -c and for a short flag cluster holding c (-lc, -ec): the next word is a command."""
+    return flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]
+
+
 def git_calls(toks, depth=0):
     """Yields (subcommand, args, options before it) for every git call, nested shells included."""
     for i, tok in enumerate(toks):
         name = os.path.basename(tok)
-        if name in SHELLS and i + 2 < len(toks) and toks[i + 1] == "-c" and depth < 3:
+        if name in SHELLS and i + 2 < len(toks) and depth < 3 and _has_c(toks[i + 1]):
             yield from git_calls(tokens(toks[i + 2]), depth + 1)
         elif name == "eval" and i + 1 < len(toks) and depth < 3:
             yield from git_calls(tokens(" ".join(toks[i + 1:])), depth + 1)
@@ -120,3 +125,35 @@ def writes_to(named, patterns):
         return False
     return bool(VERBS.search(named)) or any(
         re.search(r"(?:&\s*>|>>|>\s*\||>)\s*['\"]?\S*" + p, named) for p in patterns)
+
+
+def _group(text, start):
+    """The text inside the parentheses that open at text[start - 1], and where they close."""
+    depth, i = 1, start
+    while i < len(text) and depth:
+        depth += {"(": 1, ")": -1}.get(text[i], 0)
+        i += 1
+    return text[start:i - 1], i
+
+
+def nested_texts(cmd, depth=0):
+    """Command lines inside a command line: the body of a heredoc that feeds a shell or eval, the
+    contents of $( ) and of backticks, each also searched in turn. A heredoc feeding git commit or
+    cat stays text."""
+    out = []
+    for m in HEREDOC.finditer(cmd):
+        head = cmd[:m.start()].split("\n")[-1]
+        words = tokens(re.split(r"[;&|(]", head)[-1])
+        word = next((w for w in words if "=" not in w and w not in ("sudo", "env")), "")
+        if os.path.basename(word) in SHELLS | {"eval"}:
+            out.append(m.group(0).split("\n", 1)[1].rsplit("\n", 1)[0])
+    i = cmd.find("$(")
+    while i != -1:
+        inner, end = _group(cmd, i + 2)
+        out.append(inner)
+        i = cmd.find("$(", end)
+    out += re.findall(r"`([^`]*)`", cmd)
+    if depth < 3:
+        for text in list(out):
+            out += nested_texts(text, depth + 1)
+    return out
