@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I drops it
 
 import configcmd  # noqa: E402
+import door  # noqa: E402
 import handoff  # noqa: E402
 import migrate  # noqa: E402
 import recover  # noqa: E402
@@ -31,6 +32,10 @@ def parser():
     for cmd in ("migrate", "recover"):
         sub.add_parser(cmd, parents=[common]).add_argument("target", nargs="?")
     sub.add_parser("size", parents=[common]).add_argument("path", nargs="?")
+    sub.add_parser("push", parents=[common]).add_argument("repo")
+    tg = sub.add_parser("tag", parents=[common])
+    tg.add_argument("repo")
+    tg.add_argument("version")
     cf = sub.add_parser("config", parents=[common])
     cf.add_argument("action", choices=["show", "discover", "apply"])
     cf.add_argument("draft", nargs="?")
@@ -65,6 +70,8 @@ def main(argv):
         return handoff.run_save(ident) if args.action == "save" else handoff.run_status(ident)
     if args.cmd == "migrate":
         return migrate.run(ident, args.target)
+    if args.cmd in ("push", "tag"):
+        return door.run_command(ident, args.cmd, args.repo, getattr(args, "version", None))
     if args.cmd == "config":
         return run_config(ident, args)
     if args.cmd == "recover":
