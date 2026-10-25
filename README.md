@@ -26,6 +26,22 @@ From a local clone: `/plugin marketplace add ./session-crew`, then the same `/pl
 If another size hook is already in your `settings.json` under `UserPromptSubmit`, remove it: both
 would run.
 
+## Commands
+
+| Command | What it does | When |
+|---|---|---|
+| `/handoff` | writes this session's handover: the work under way, your last requests and decisions in your words, what remains, where things are | when the size hook tells you, or whenever you like |
+| `/migrate` | reads the pending handover, says who the session is and what comes next, and marks the handover used; with no handover, recovers from the old transcript | after `/clear`, in the same tab |
+| `/migrate <name>` | the same, and gives this session the old one's name first (see [the rename hook](#the-rename-hook)) | in a new tab of the same folder |
+
+Each is also reachable by its full name, `/session-crew:handoff` and `/session-crew:migrate`, when
+another plugin uses the same word. Under Copilot the same skills are read from `skills/*/SKILL.md`
+and the script takes `--name` and `--cwd` (see [Copilot](#copilot)).
+
+Without a command, three hooks act on their own: the size hook on every message (past `warn_mb`
+it tells the session to hand over), the start hook after `/clear` or at startup (it announces a
+pending handover), and the rename hook (only on a prompt that is exactly `/migrate <name>`).
+
 ## Use
 
 **Same tab.** Past `warn_mb` the size hook tells the session to close the item under way and run
