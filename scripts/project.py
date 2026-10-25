@@ -101,12 +101,14 @@ def diff(old, new):
         a, b = old.get(key), new.get(key)
         if a == b:
             continue
-        if key not in old:
+        named_a = _by_name(a if key in old else [])
+        named_b = _by_name(b if key in new else [])
+        if named_a is not None and named_b is not None:
+            out += _diff_named(key, named_a, named_b)
+        elif key not in old:
             out.append("%s: added %s" % (key, _show(b)))
         elif key not in new:
             out.append("%s: removed" % key)
-        elif _by_name(a) is not None and _by_name(b) is not None:
-            out += _diff_named(key, _by_name(a), _by_name(b))
         else:
             out.append("%s: %s -> %s" % (key, _show(a), _show(b)))
     return out

@@ -6,6 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # -I drops it
 
+import configcmd  # noqa: E402
 import handoff  # noqa: E402
 import migrate  # noqa: E402
 import recover  # noqa: E402
@@ -30,6 +31,9 @@ def parser():
     for cmd in ("migrate", "recover"):
         sub.add_parser(cmd, parents=[common]).add_argument("target", nargs="?")
     sub.add_parser("size", parents=[common]).add_argument("path", nargs="?")
+    cf = sub.add_parser("config", parents=[common])
+    cf.add_argument("action", choices=["show", "discover", "apply"])
+    cf.add_argument("draft", nargs="?")
     return p
 
 
@@ -43,6 +47,15 @@ def run_hook(which):
         return 1
 
 
+def run_config(ident, args):
+    if args.action == "apply":
+        if not args.draft:
+            print("config apply needs a draft (a file in the project's drafts folder)", file=sys.stderr)
+            return 2
+        return configcmd.apply(ident, args.draft)
+    return configcmd.show(ident) if args.action == "show" else configcmd.discover(ident)
+
+
 def main(argv):
     args = parser().parse_args(argv)
     if args.cmd == "hook":
@@ -52,6 +65,8 @@ def main(argv):
         return handoff.run_save(ident) if args.action == "save" else handoff.run_status(ident)
     if args.cmd == "migrate":
         return migrate.run(ident, args.target)
+    if args.cmd == "config":
+        return run_config(ident, args)
     if args.cmd == "recover":
         return recover.run(ident, args.target or ident.name)
     return size.run_command(ident, args.path)
