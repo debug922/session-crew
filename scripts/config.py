@@ -47,6 +47,23 @@ def project_dir(cwd):
     return os.path.join(home(), slug(cwd))
 
 
+def project_file(cwd):
+    return os.path.join(project_dir(cwd), "project.json")
+
+
+def locate(cwd):
+    """The folder (cwd or its nearest ancestor) that has a project.json, or None. A session often
+    works in a subfolder of the one it was opened from; the project is the folder that has a file."""
+    path = os.path.abspath(cwd or "")
+    while True:
+        if os.path.isfile(project_file(path)):
+            return path
+        parent = os.path.dirname(path)
+        if parent == path:
+            return None
+        path = parent
+
+
 def safe_name(name):
     """A name fit to be a folder name: anything outside the allowed set becomes `_`."""
     cleaned = re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:64].lstrip(".-_") or "_"
