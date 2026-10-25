@@ -128,9 +128,10 @@ class CrewHome(GuardCase):
         for cmd in ["python3 -c \"open('%s','w').write('{}')\"" % p, "python3 -I -c \"import os; os.remove('%s')\"" % p,
                     "python -c \"open('~/.session-crew/x/project.json','w')\"",
                     "perl -e 'open(F, \">%s\")'" % p, "ruby -e 'File.write(\"%s\", 1)'" % p,
-                    "node -e \"require('fs').writeFileSync('%s', '{}')\"" % p,
-                    "python3 -c \"import shutil; shutil.copy('a', '%s/hooks/hooks.json')\"" % guard.ROOT]:
+                    "node -e \"require('fs').writeFileSync('%s', '{}')\"" % p]:
             self.assertEqual(self.bash(cmd), "ask", cmd)
+        self.assertEqual(self.bash("python3 -c \"import shutil; shutil.copy('a', '%s/hooks/hooks.json')\""
+                                   % guard.ROOT), "deny")
         for cmd in ["python3 -c 'print(1)'", "python3 -m unittest", "node script.js", "perl -e 'print 1'",
                     "python3 -I -c 'import json'"]:
             self.assertIsNone(self.bash(cmd), cmd)
@@ -156,3 +157,51 @@ class CrewHome(GuardCase):
                 self.assertEqual(self.files(tool, file_path=path, content="x"), "ask", (tool, path))
         self.assertIsNone(self.files("Write", file_path=os.path.join(self.slug, "drafts", "d.json"), content="x"))
         self.assertIsNone(self.files("Write", file_path=os.path.join(outside, "other.json"), content="x"))
+
+
+class OnlyWhatIsRun(GuardCase):
+    """A crew.py that is only an argument is not a door: ordinary work on session-crew's own
+    repository goes on from a configured folder."""
+
+    def setUp(self):
+        super().setUp()
+        self.copy = os.path.join(self.work, "copy-of-the-repository")
+        os.makedirs(os.path.join(self.copy, "scripts"))
+        with open(os.path.join(self.copy, "scripts", "crew.py"), "w") as f:
+            f.write("print('x')\n")
+        self.git("copy-of-the-repository", "init", "-q", "-b", "main")
+
+    def test_git_grep_and_the_like_may_name_a_crew_py(self):
+        for cmd, cwd in [("git -C %s add scripts/crew.py" % self.copy, self.work),
+                         ("git log -- scripts/crew.py", self.copy), ("git diff scripts/crew.py", self.copy),
+                         ("grep -n x scripts/crew.py", self.copy), ("sed -n 1,5p scripts/crew.py", self.copy),
+                         ("cat scripts/crew.py", self.copy), ("wc -l scripts/crew.py", self.copy),
+                         ("vim scripts/crew.py", self.copy), ("git add scripts/crew.py", self.copy),
+                         ("git mv scripts/crew.py scripts/crew2.py", self.copy)]:
+            self.assertIsNone(self.bash(cmd, cwd=cwd), cmd)
+
+    def test_running_a_crew_py_of_a_copy_is_refused_in_every_way_it_can_be_run(self):
+        for cmd in ["python3 -I scripts/crew.py push core", "python3 scripts/crew.py migrate",
+                    "python3.12 -B scripts/crew.py migrate", "./scripts/crew.py migrate",
+                    "scripts/crew.py migrate", "X=1 python3 scripts/crew.py migrate",
+                    "nice python3 scripts/crew.py migrate", "bash -c 'python3 scripts/crew.py migrate'",
+                    "bash -lc \"python3 -I scripts/crew.py push core\"", "eval python3 scripts/crew.py migrate",
+                    "echo $(python3 scripts/crew.py migrate)", "echo `scripts/crew.py migrate`",
+                    "bash <<'EOF'\npython3 scripts/crew.py migrate\nEOF", "python3 -I scripts/cr*.py push core",
+                    "python3 scripts/?rew.py migrate", "ls; python3 scripts/crew.py migrate",
+                    "true && python3 scripts/crew.py migrate", "bash scripts/crew.py", "source scripts/crew.py"]:
+            self.assertEqual(self.bash(cmd, cwd=self.copy), "deny", cmd)
+
+    def test_python_that_runs_no_file_is_not_a_door(self):
+        for cmd in ["python3 -c 'print(1)' scripts/crew.py", "python3 -m unittest scripts/crew.py",
+                    "python3 -I -m pyflakes scripts/crew.py"]:
+            self.assertIsNone(self.bash(cmd, cwd=self.copy), cmd)
+
+    def test_copying_the_installed_plugins_script_out_is_refused(self):
+        for cmd in ["cp %s/scripts/crew.py /tmp/x.py" % guard.ROOT, "cp %s /tmp/x.py" % guard.CREW,
+                    "cd %s && cp scripts/crew.py /tmp/x.py" % guard.ROOT,
+                    "mv %s/scripts/crew.py /tmp/x.py" % guard.ROOT, "cp -r %s /tmp/plugin" % guard.ROOT,
+                    "cp %s/scripts/c*.py /tmp/" % guard.ROOT, "git -C %s checkout ." % guard.ROOT]:
+            self.assertEqual(self.bash(cmd), "deny", cmd)
+        project.write(guard.ROOT, {"repos": self.entries})  # a project at the plugin's own folder
+        self.assertEqual(self.bash("cp scripts/crew.py /tmp/x.py", cwd=guard.ROOT), "deny")

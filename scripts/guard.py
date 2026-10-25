@@ -22,7 +22,7 @@ from verdict import Verdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CREW = os.path.join(ROOT, "scripts", "crew.py")
 CREW_PATHS = {CREW, os.path.realpath(CREW)}
-SCRIPTS = sorted({os.path.dirname(p) for p in CREW_PATHS})
+PLUGIN = sorted({ROOT, os.path.realpath(ROOT)})
 APPLY_WORDS = re.compile(r"crew\.py[\"']?\s+config\s+apply\b")
 RAW_DOOR = re.compile(r"crew\.py\W+(?:push|tag|config)\b")  # in the event's JSON text, for a crash
 CREW_HOME = r"\.session-crew"
@@ -106,11 +106,14 @@ def configuration(named, toks, pcwd):
     return None
 
 
-def crew_shape(cmd, toks, named_toks, cwd, event, pcwd):
+def crew_shape(cmd, toks, texts, cwd, event, pcwd):
     """The verdict for a line that names the plugin's scripts: (decided, verdict). Only a
     configured project is held to the exact shapes; elsewhere only `config apply` is asked about
     (by configuration)."""
-    if pcwd is None or not shapes.names_scripts(named_toks, cwd, SCRIPTS):
+    # A commit message is text, so the words that name the plugin leave it out; what is run is
+    # judged on the whole words (`python -m x` must not lose its argument to the -m rule).
+    if pcwd is None or not any(shapes.names_plugin(list(sw.without_messages(t)), cwd, PLUGIN)
+                               or shapes.runs_crew(t, cwd) for t in texts):
         return False, None
     shape = shapes.classify(cmd, CREW_PATHS)
     if shape is None:
@@ -137,7 +140,8 @@ def check_bash(event):
     toks = sw.tokens(cmd)
     named_toks = list(sw.without_messages(toks))
     named = " ".join(named_toks)
-    decided, verdict = crew_shape(cmd, toks, named_toks, cwd, event, pcwd)
+    texts = [toks] + [sw.tokens(t) for t in sw.nested_texts(cmd)]
+    decided, verdict = crew_shape(cmd, toks, texts, cwd, event, pcwd)
     if decided:
         return verdict
     found = configuration(named, named_toks, pcwd)
@@ -146,7 +150,6 @@ def check_bash(event):
     if pcwd is None:
         return None
     table = repos.read(pcwd)
-    texts = [toks] + [sw.tokens(t) for t in sw.nested_texts(cmd)]
     lost = gitguard.blind(texts)
     for found in (Verdict("ask", "This deletes something on GitHub, which goes only on the user's "
                                  "explicit request. It runs only if he confirms.")

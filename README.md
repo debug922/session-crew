@@ -123,12 +123,13 @@ that an agent never opens the door, and the ask before a public push by day.
 The guard (PreToolUse, for Bash and for the file tools) holds the rest, for the project of the
 event's folder:
 
-- any line that names the plugin's `crew.py`, a word under its `scripts/` folder, or a glob that
-  could match one there, must be exactly one of the allowed shapes (the door lines, `config
-  show|discover|apply`, and v1's own `handoff`, `migrate`, `recover`, `size` and `hook` forms),
-  alone on its line by the plugin's own path, with no env prefix, `bash -c`, `$(...)` or extra
-  words; anything else is refused and the refusal lists the shapes. A plain read (`cat`, `grep`,
-  `ls`) of the scripts is free. The door's line also needs a session the table names as a pusher,
+- a line that has a word under the installed plugin's folder (or a glob that could match one
+  there), or that runs a script named `crew.py` (the program word, or python's script argument, also
+  inside `bash -c`, heredocs fed to a shell, `$(...)` and backticks), must be exactly one of the
+  allowed shapes (the door lines, `config show|discover|apply`, and v1's own `handoff`, `migrate`,
+  `recover`, `size` and `hook` forms), alone on its line by the plugin's own path, with no env prefix, `bash -c`, `$(...)` or extra
+  words; anything else is refused and the refusal lists the shapes. A `crew.py` that is only an argument of git, grep or an editor is not run, so
+  working on a copy of this repository is not held up; a plain read (`cat`, `grep`, `ls`) of the plugin is free. The door's line also needs a session the table names as a pusher,
   never an agent; a public repository asks you;
 - in a project with a table, `git push` passes only when the guard places the repository (no `cd`,
   env prefix, `--git-dir` or `--work-tree`), it is not in the table, and every place the push goes

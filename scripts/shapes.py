@@ -1,14 +1,17 @@
-"""The exact shapes of a command line that names the plugin's scripts.
+"""The exact shapes of a command line that reaches the plugin's scripts.
 
-Anything that names crew.py, a word under the plugin's scripts folder, or a glob that could match
-one there, must be exactly one of these shapes (judged on the whole line, alone, no env prefix, no
-`bash -c`, no `$(...)`, no extra words), or the guard refuses it. Reading the scripts with a
-plain reader (cat, grep, ls ...) is free.
+A line is held to these shapes when a word lies under the installed plugin's folder (or is a glob
+that could match one there), or when it executes a script named crew.py (or a glob that could
+match one). Then it must be exactly one shape, judged on the whole line: alone, no env prefix, no
+`bash -c`, no `$(...)`, no extra words; or the guard refuses it. A crew.py that is only an argument
+of git, grep or an editor is not run, and a plain read (cat, grep, ls ...) of the plugin is free.
 """
 import fnmatch
 import os
 import re
 import shlex
+
+from shellwords import SHELLS, _has_c, tokens
 
 SAFE = re.compile(r"[\w./~+@%:-]+")
 REPO = re.compile(r"[A-Za-z0-9][\w.-]*")
@@ -97,17 +100,18 @@ def _under(path, folders):
     return any(path == d or path.startswith(d + os.sep) for d in folders)
 
 
-def names_scripts(toks, cwd, folders):
-    """True when a word is crew.py, lies under the scripts folder (resolved from cwd), or is a glob
-    that could match something there."""
+def names_plugin(toks, cwd, folders):
+    """(a) True when a word lies under the installed plugin's folder (resolved from cwd, symlinks
+    too), or is a glob that could match something there: copying a script out still names it."""
     cands = []
     for d in folders:
         try:
             cands += [d] + [os.path.join(d, f) for f in os.listdir(d)]
+            cands += [os.path.join(d, "scripts", f) for f in os.listdir(os.path.join(d, "scripts"))]
         except OSError:
             pass
     for t in toks:
-        if "crew.py" in t or any(d in t for d in folders):
+        if any(d in t for d in folders):
             return True
         if t.startswith("-") or set(t) <= set(";&|()"):
             continue
@@ -115,6 +119,62 @@ def names_scripts(toks, cwd, folders):
         if _under(full, folders) or _under(os.path.realpath(full), folders):
             return True
         if any(c in t for c in "*?[") and any(fnmatch.fnmatchcase(c, full) for c in cands):
+            return True
+    return False
+
+
+def is_crew(word):
+    """A script named crew.py, or a glob whose last part could match that name."""
+    base = os.path.basename(word)
+    return base == "crew.py" or (any(c in base for c in "*?[") and fnmatch.fnmatchcase("crew.py", base))
+
+
+WRAPPERS = {"env", "nice", "sudo", "time", "exec", "command", "nohup", "xargs"}
+PYTHON = re.compile(r"python[\d.]*")
+
+
+def _script_of_python(toks, j):
+    """The script a python at toks[j] runs, or None (-c and -m run no file)."""
+    for k in range(j + 1, len(toks)):
+        t = toks[k]
+        if t.startswith("-"):
+            if not t.startswith("--") and set("cm") & set(t[1:]):
+                return None
+            continue
+        return t
+    return None
+
+
+def runs_crew(toks, cwd, depth=0):
+    """(b) True when a simple command executes a script named crew.py (or a glob that could match
+    one): the program word itself, or the script argument of python, also inside `sh -c`, `eval`.
+    A crew.py that is only an argument of git, grep, cat or an editor is not run."""
+    for i, t in enumerate(toks):
+        if i and not set(toks[i - 1]) <= set(";&|("):
+            continue
+        j = i
+        while j < len(toks) and ("=" in toks[j] and not toks[j].startswith("-")
+                                 or os.path.basename(toks[j]) in WRAPPERS):
+            j += 1
+        if j >= len(toks):
+            continue
+        prog, base = toks[j], os.path.basename(toks[j])
+        if is_crew(prog):
+            return True
+        if PYTHON.fullmatch(base):
+            script = _script_of_python(toks, j)
+            if script and is_crew(script):
+                return True
+        elif base in SHELLS and depth < 3:
+            rest = toks[j + 1:]
+            if rest and _has_c(rest[0]) and len(rest) > 1:
+                if runs_crew(tokens(rest[1]), cwd, depth + 1):
+                    return True
+            elif rest and not rest[0].startswith("-") and is_crew(rest[0]):
+                return True
+        elif base == "eval" and depth < 3 and runs_crew(tokens(" ".join(toks[j + 1:])), cwd, depth + 1):
+            return True
+        elif base in ("source", ".") and len(toks) > j + 1 and is_crew(toks[j + 1]):
             return True
     return False
 

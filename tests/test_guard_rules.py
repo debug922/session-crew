@@ -109,11 +109,10 @@ class Configuration(GuardCase):
         self.assertEqual(self.bash("echo {} > %s" % self.file), "deny")
 
     def test_writing_into_the_plugins_folder_asks(self):
+        # A word under the installed plugin's folder that is not an allowed shape or a plain read
+        # is refused outright (it is stricter than asking).
         for cmd in ["echo x > %s/hooks/hooks.json" % guard.ROOT, "rm -r %s" % guard.ROOT,
-                    "cp x.md %s/README.md" % guard.ROOT]:
-            self.assertEqual(self.bash(cmd), "ask", cmd)
-        # Anything naming the scripts that is not an allowed shape or a plain read is refused.
-        for cmd in ["cp x.py %s/scripts/guard.py" % guard.ROOT,
+                    "cp x.md %s/README.md" % guard.ROOT, "cp x.py %s/scripts/guard.py" % guard.ROOT,
                     "sed -i '' s/a/b/ %s/scripts/door.py" % guard.ROOT]:
             self.assertEqual(self.bash(cmd), "deny", cmd)
 
