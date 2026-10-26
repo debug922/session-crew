@@ -205,3 +205,40 @@ class OnlyWhatIsRun(GuardCase):
             self.assertEqual(self.bash(cmd), "deny", cmd)
         project.write(guard.ROOT, {"repos": self.entries})  # a project at the plugin's own folder
         self.assertEqual(self.bash("cp scripts/crew.py /tmp/x.py", cwd=guard.ROOT), "deny")
+
+
+class CrewHomeRefined(GuardCase):
+    def setUp(self):
+        super().setUp()
+        self.home = config.home()
+        self.slug = os.path.join(self.home, "-some-slug")
+
+    def test_the_file_tools_ask_for_anything_under_the_crew_home_but_drafts_and_handovers(self):
+        for path in [os.path.join(self.home, "stray.json"), os.path.join(self.slug, "releases.log"),
+                     os.path.join(self.slug, "project.json.prev"), os.path.join(self.slug, "x", "y.json"),
+                     os.path.join(self.slug, "boss", "notes.txt"), os.path.join(self.slug, "boss", "a", "h.md"),
+                     os.path.join(self.slug, "project.json")]:
+            self.assertEqual(self.files("Write", file_path=path, content="x"), "ask", path)
+        for path in [os.path.join(self.slug, "drafts", "d.json"), os.path.join(self.slug, "drafts", "sub", "d.json"),
+                     os.path.join(self.slug, "boss", "20261026T000000Z-aaaaaaaa.md")]:
+            self.assertIsNone(self.files("Write", file_path=path, content="x"), path)
+
+    def test_a_line_that_cds_into_the_home_or_assigns_it_asks_when_it_also_writes(self):
+        for cmd in ["cd %s && echo x > project.json" % self.slug, "cd %s; tee project.json" % self.slug,
+                    "pushd %s && cp /tmp/x ." % self.home, "D=%s; echo x > $D/-s/project.json" % self.home,
+                    "export H=%s && cp /tmp/x $H/-s/project.json" % self.slug,
+                    "cd %s && rm project.json" % self.slug]:
+            self.assertEqual(self.bash(cmd), "ask", cmd)
+        for cmd in ["cd %s && cat project.json" % self.slug, "D=%s; ls $D" % self.slug,
+                    "cd %s && ls" % self.home]:
+            self.assertIsNone(self.bash(cmd), cmd)
+
+    def test_a_copy_or_a_tee_only_reads_when_the_home_is_its_source(self):
+        p = os.path.join(self.slug, "project.json")
+        for cmd in ["cp %s /tmp/o" % p, "cat %s | tee /tmp/o" % p, "cp -r %s /tmp/backup" % self.slug,
+                    "rsync -a %s/ /tmp/backup/" % self.slug, "install %s /tmp/o" % p, "cat %s > /tmp/o" % p,
+                    "tee /tmp/o < %s" % p]:
+            self.assertIsNone(self.bash(cmd), cmd)
+        for cmd in ["cp x %s" % p, "cp -t %s x" % self.slug, "install x %s" % p, "rsync x %s" % p,
+                    "tee %s" % p, "cat x | tee -a %s" % p, "mv x %s" % p, "dd if=x of=%s" % p]:
+            self.assertEqual(self.bash(cmd), "ask", cmd)

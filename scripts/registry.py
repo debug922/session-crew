@@ -64,12 +64,16 @@ def parent_pid(pid):
 
 
 def find_by_ancestry():
-    """Walk up the parent pids to the first one with a registry file."""
+    """Walk up the parent pids to the first one with a registry file that is true: its procStart
+    must match the process now running under that pid, so a stale file under a reused pid, or one
+    that cannot be checked, never counts (the door takes this as proof of who calls)."""
     by_pid = {e["pid"]: e for e in read_all() if type(e.get("pid")) is int}
     pid, seen = os.getpid(), set()
     while pid > 1 and pid not in seen:
-        if pid in by_pid:
-            return by_pid[pid]
+        entry = by_pid.get(pid)
+        if entry is not None and entry.get("procStart") \
+                and " ".join(str(entry["procStart"]).split()) == proc_start(pid):
+            return entry
         seen.add(pid)
         pid = parent_pid(pid)
     return None

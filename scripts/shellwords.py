@@ -157,3 +157,31 @@ def nested_texts(cmd, depth=0):
         for text in list(out):
             out += nested_texts(text, depth + 1)
     return out
+
+
+def shell_args(toks):
+    """Token lists of the command strings a line hands to a shell (sh -c, su -c), to eval, or to
+    ssh as a remote command naming git."""
+    out = []
+    for i, t in enumerate(toks):
+        base = os.path.basename(t)
+        if base in SHELLS | {"su"}:
+            for k in range(i + 1, min(len(toks), i + 6)):
+                if (_has_c(toks[k]) or toks[k] == "--command") and k + 1 < len(toks):
+                    out.append(tokens(toks[k + 1]))
+                    break
+        elif base == "eval":
+            out.append(tokens(" ".join(toks[i + 1:])))
+        elif base == "ssh":
+            out += [tokens(a) for a in toks[i + 1:] if "git" in a and " " in a]
+    return out
+
+
+def all_lists(cmd):
+    """The command's words, and the words of every command line inside it: heredocs fed to a
+    shell, $( ), backticks, and what is handed to sh -c, su -c, eval and ssh, to any depth."""
+    lists = [tokens(cmd)] + [tokens(t) for t in nested_texts(cmd)]
+    for toks in lists:  # lists grows while it is walked: the new lists are walked in turn
+        if len(lists) < 64:
+            lists += shell_args(toks)
+    return lists

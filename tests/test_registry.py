@@ -40,3 +40,25 @@ class FindBySessionId(CrewCase):
 
     def test_an_unknown_id_is_none(self):
         self.assertIsNone(registry.find_by_session_id("nope"))
+
+
+class Ancestry(CrewCase):
+    """The door and the guard take the registry as proof: a file counts only for the process that
+    really started when it says (a stale file under a reused pid never does)."""
+
+    def test_a_file_whose_start_time_matches_the_live_process_counts(self):
+        self.session(os.getpid(), "s1", "boss")  # procStart read from the real process
+        self.assertEqual(registry.find_by_ancestry()["name"], "boss")
+
+    def test_a_file_under_a_reused_pid_does_not(self):
+        self.session(os.getpid(), "s1", "boss", started="Mon Jan  1 00:00:00 2001")
+        self.assertIsNone(registry.find_by_ancestry())
+
+    def test_a_file_with_no_start_time_cannot_be_verified_and_does_not_count(self):
+        self.session(os.getpid(), "s1", "boss", started=None)
+        self.assertIsNone(registry.find_by_ancestry())
+
+    def test_the_walk_goes_on_past_a_false_file_to_a_true_one_above(self):
+        self.session(os.getpid(), "s1", "false", started="Mon Jan  1 00:00:00 2001")
+        self.session(os.getppid(), "s2", "true")
+        self.assertEqual(registry.find_by_ancestry()["name"], "true")
