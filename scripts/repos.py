@@ -12,20 +12,19 @@ import urllib.error
 import urllib.request
 
 import config
+import remotes
 
 PRESETS = ("go", "unittest", "frontend")
 VISIBILITY = ("private", "public")
 NAME = re.compile(r"[A-Za-z0-9][\w.-]{0,63}")
 GITHUB = re.compile(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*")
-GITHUB_URL = re.compile(r"(?:git@github\.com:|(?:https|ssh)://(?:[^@/]+@)?github\.com/)"
-                        r"([\w.-]+/[\w.-]+?)(?:\.git)?/?", re.IGNORECASE)
 CHECK_KEYS = {"run", "in", "when_changed", "in_repo"}
 
 
 def github_of(url):
-    """owner/name of a GitHub remote's URL, lowered; None for a URL that is not GitHub's."""
-    m = GITHUB_URL.fullmatch((url or "").strip())
-    return m.group(1).lower() if m else None
+    """owner/name of a GitHub remote's URL, lowered; None for any URL that does not name one."""
+    kind, name = remotes.parse(url)
+    return name if kind == "github" else None
 
 
 def _relative_dir(value):

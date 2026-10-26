@@ -5,6 +5,7 @@ import os
 from helpers import CWD, CrewCase
 
 import config
+import remotes
 import repos
 
 
@@ -13,6 +14,39 @@ def entry(name="core", **kw):
          "pushers": ["boss"], "checks": ["unittest"], "tags": None}
     e.update(kw)
     return e
+
+
+SPELLINGS = ["git@github.com:o/r.git", "git@github.com:o/r", "git@github.com:/o/r.git", "github.com:o/r",
+             "https://github.com/o/r", "https://github.com/o/r.git", "https://github.com/O/R.git/",
+             "https://www.github.com/o/r", "http://github.com/o/r", "git://github.com/o/r.git",
+             "ssh://git@github.com/o/r.git", "ssh://git@github.com:22/o/r.git",
+             "ssh://git@ssh.github.com:443/o/r.git", "ssh://git@ssh.github.com:443/o/r", "git@ssh.github.com:o/r.git",
+             "ssh://github.com/o/r", "git+ssh://git@github.com/o/r.git", "https://tok@github.com/o/r",
+             "https://user:pw@github.com:443/o/r.git", "https://github.com/o/r.git?x=1", "https://github.com/o/r#frag",
+             "https://github.com/o/r/?a=b#c", "  https://GITHUB.com/o/r  ", "https://GitHub.Com/O/R"]
+NOT_PARSEABLE = ["https://github.com/o", "https://github.com/", "https://github.com", "git@github.com:",
+                 "git@github.com:o", "git@github.com:o/r/extra", "https://github.com/o/r/info/refs",
+                 "https://github.com.evil/o/r", "https://www.github.com/", "ssh://git@ssh.github.com:443/",
+                 "https://github.com//r", "https://github.com/o//", "git@github.com:o/", "",
+                 "ftp://sub.github.com/o/r"]
+
+
+class GithubSpellings(CrewCase):
+    def test_every_spelling_of_one_repository_gives_the_same_name(self):
+        for url in SPELLINGS:
+            self.assertEqual(remotes.parse(url), ("github", "o/r"), url)
+            self.assertEqual(repos.github_of(url), "o/r", url)
+
+    def test_a_url_that_names_github_but_does_not_parse_is_bad_never_other(self):
+        for url in NOT_PARSEABLE:
+            self.assertEqual(remotes.parse(url)[0], "bad", url)
+            self.assertIsNone(repos.github_of(url), url)
+
+    def test_other_hosts_and_local_paths_are_other(self):
+        for url in ["git@gitlab.com:o/r.git", "https://example.org/o/r", "/srv/git/r.git", "../core",
+                    "./x", "~/code/x", "file:///srv/r.git", "ssh://git@host:2222/o/r.git",
+                    "/home/u/github.com/o/r"]:
+            self.assertEqual(remotes.parse(url), ("other", None), url)
 
 
 class GithubUrl(CrewCase):

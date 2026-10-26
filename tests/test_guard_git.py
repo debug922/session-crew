@@ -24,6 +24,23 @@ class Destinations(GuardCase):
                     "git push --repo git@github.com:o/lib.git", "git push -u git@github.com:o/site main"]:
             self.assertEqual(self.push(cmd), "deny", cmd)
 
+    def test_every_spelling_of_a_table_repository_is_refused_and_one_that_cannot_be_read_too(self):
+        for url in ["ssh://git@github.com:22/o/lib.git", "ssh://git@ssh.github.com:443/o/lib.git",
+                    "https://www.github.com/o/lib", "git://github.com/o/core.git", "git@github.com:/o/lib.git",
+                    "https://github.com/o/lib/", "https://github.com/O/LIB.git?x=1", "https://github.com/o/lib#f",
+                    "git@ssh.github.com:o/site.git"]:
+            self.assertEqual(self.push("git push %s main" % url), "deny", url)
+        for url in ["https://github.com/o", "git@github.com:", "https://github.com/o/lib/extra",
+                    "https://github.com.evil/o/lib", "https://github.com/"]:
+            self.assertEqual(self.push("git push %s main" % url), "deny", url)  # names GitHub, no repository
+        self.git("other", "remote", "set-url", "origin", "ssh://git@ssh.github.com:443/o/lib.git")
+        self.assertEqual(self.push("git push"), "deny")
+
+    def test_a_github_repository_outside_the_table_and_a_local_path_are_allowed(self):
+        for url in ["ssh://git@ssh.github.com:443/x/else.git", "https://www.github.com/x/else/", "git@github.com:/x/else.git",
+                    "../core", "/tmp/x.git", "file:///tmp/x.git", "https://example.org/o/lib"]:
+            self.assertIsNone(self.push("git push %s main" % url), url)
+
     def test_a_remote_whose_url_or_pushurl_is_a_table_repository_is_refused(self):
         self.git("other", "remote", "set-url", "origin", "git@github.com:o/lib.git")
         for cmd in ["git push", "git push origin main"]:

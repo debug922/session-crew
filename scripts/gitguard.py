@@ -4,7 +4,7 @@ import re
 import shlex
 
 import pushdest
-import repos
+import remotes
 import shellwords as sw
 from verdict import Verdict
 
@@ -107,7 +107,11 @@ def push_verdict(args, top, table, subs):
         return Verdict("deny", "The guard cannot resolve where this push goes (a remote that is not "
                                "in the repository's configuration).")
     mine = {e["github"].lower() for e in table.entries.values()}
-    if any(repos.github_of(u) in mine for u in urls):
+    kinds = [remotes.parse(u) for u in urls]
+    if any(kind == "bad" for kind, _ in kinds):
+        return Verdict("deny", "This push goes to a URL that names GitHub but not one repository the "
+                               "guard can read: refused, since it could be a table repository.")
+    if any(name in mine for _, name in kinds):
         return Verdict("deny", "This push goes to a repository of the project's table: use /push "
                                "<repo> (crew.py push).")
     return None
