@@ -19,7 +19,8 @@ class Registry(GuardCase):
     def both(self, fn, expect):
         """The same check in the configured folder and, the project file gone, in an unconfigured one."""
         fn(expect)
-        os.remove(config.project_file(self.work))
+        if os.path.exists(config.project_file(self.work)):
+            os.remove(config.project_file(self.work))
         fn(expect)
 
     def test_a_write_into_the_sessions_folder_is_refused_in_every_form(self):
@@ -62,6 +63,25 @@ class Registry(GuardCase):
             for cmd in cmds:
                 self.assertEqual(self.bash(cmd, cwd=self.work), expect, cmd)
         self.both(check, None)
+
+    def test_the_claude_folder_named_by_a_cd_or_a_variable_is_not_the_sessions_folder(self):
+        c = self.claude
+        for cmd in ["cd %s && cp x /tmp/y" % c, "cd %s && echo x >> projects/p/memory/a.md" % c,
+                    "D=%s/projects; cp /tmp/a $D/a" % c, "cd %s && tee /tmp/o" % c,
+                    "export C=%s; echo x > $C/settings.json" % c, "cd ~/.claude && cp x /tmp/y"]:
+            def check(expect, cmd=cmd):
+                self.assertEqual(self.bash(cmd, cwd=self.work), expect, cmd)
+            self.both(check, None)
+
+    def test_a_relative_target_that_resolves_into_the_sessions_folder_still_is_refused(self):
+        c, s = self.claude, self.s
+        for cmd in ["cd %s && echo x > sessions/1.json" % c, "cd %s && cp /tmp/x sessions/1.json" % c,
+                    "cd %s && tee sessions/1.json" % c, "C=%s; echo x > $C/sessions/1.json" % c,
+                    "C=%s; cp /tmp/x ${C}/sessions/1.json" % c, "cd %s/projects && echo x > ../sessions/1.json" % c,
+                    "cd %s; rm 100.json" % s, "D=%s; cp /tmp/x $D" % s]:
+            def check(expect, cmd=cmd):
+                self.assertEqual(self.bash(cmd, cwd=self.work), expect, cmd)
+            self.both(check, "deny")
 
     def test_the_file_tools_judge_the_path_as_written_and_the_real_one(self):
         paths = [os.path.join(self.s, "1.json"), os.path.join(self.work, "lnk", "1.json"),

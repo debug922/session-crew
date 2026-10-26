@@ -102,12 +102,12 @@ def any_write(toks):
 
 
 def moves_into(toks):
-    """The words a line cds into, and the values it assigns to variables."""
+    """The words a line cds into, and the (name, value) pairs it assigns to variables."""
     plain, _ = redirects(toks)
     cds = []
     for seg in segments(plain):
         verb, args = _command(seg)
         if verb in ("cd", "pushd"):
             cds += [a for a in args if not a.startswith("-")][:1]
-    assigned = [t.partition("=")[2] for t in plain if re.match(r"\w+=", t)]
+    assigned = [tuple(t.split("=", 1)) for t in plain if re.match(r"\w+=", t)]
     return cds, assigned

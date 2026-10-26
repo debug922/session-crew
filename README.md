@@ -158,7 +158,7 @@ file is what grants pushes. What you want everywhere (your punctuation, your sec
 own hooks; a plugin's guard can add asks and refusals but never loosen yours (deny wins).
 
 **What the guard is.** It stops mistakes and the common forms of them. A session set on getting
-round it can, with a script of its own (a heredoc fed to an interpreter, a program it wrote). What
+round it can, with a script of its own (a heredoc fed to an interpreter, a program it wrote). The forms the review left open are the same territory: `xargs`, `make -C`, `git submodule foreach`, `find -delete`, downloads or archives unpacked into the registry, globs and split variables. What
 is left is the door's own checks, which do not depend on the guard, and your rule against working
 around a guard. A running tab sees the guard only after `/reload-plugins`.
 

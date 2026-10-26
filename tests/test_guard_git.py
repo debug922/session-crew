@@ -186,11 +186,17 @@ class Blind(GuardCase):
             self.assertIsNone(self.run_in(cmd), cmd)
 
     def test_writing_an_alias_is_refused_unless_its_value_names_nothing_that_matters(self):
-        for cmd in ["git config alias.x 'cd ..'", "git config alias.x '!ls'", "git config alias.x push",
+        for cmd in ["git config alias.x 'cd ..'", "git config alias.x push",
                     "git config alias.x 'pushd ..'", "git config --global alias.x 'tag -d'",
-                    "git config alias.x=push", "git -c alias.x=status x"]:
+                    "git config alias.x=push", "git -c alias.x=status x",
+                    "git config alias.x '!cd ../lib && git push'", "git config alias.x '!$G push'",
+                    "git config alias.x '!ssh host ls'", "git config alias.x '!find . -exec git push {} \\;'",
+                    "git config alias.x '!env -C ../lib git status'", "git config alias.x '!env --chdir=.. ls'",
+                    "git config alias.x '!`which git` status'"]:
             self.assertEqual(self.run_in(cmd), "deny", cmd)
-        for cmd in ["git config alias.st status", "git config alias.lg 'log --oneline'", "git config user.name x"]:
+        for cmd in ["git config alias.st status", "git config alias.lg 'log --oneline'", "git config user.name x",
+                    "git config alias.sync '!git fetch && git rebase'", "git config alias.s '!git status'",
+                    "git config alias.x '!ls'"]:
             self.assertIsNone(self.run_in(cmd), cmd)
 
     def test_editing_the_repositorys_config_file_by_a_write_verb_is_refused(self):
@@ -200,3 +206,24 @@ class Blind(GuardCase):
             self.assertEqual(self.run_in(cmd), "deny", cmd)
         for cmd in ["cat .git/config", "grep url .git/config", "cp .git/config /tmp/o", "ls .git"]:
             self.assertIsNone(self.run_in(cmd), cmd)
+
+
+class DynamicDirectory(GuardCase):
+    """A git -C whose word the shell decides (a variable, a substitution, a glob) is unplaceable."""
+
+    def run_in(self, cmd, repo="other"):
+        return self.bash(cmd, cwd=os.path.join(self.work, repo))
+
+    def test_a_dynamic_c_word_is_refused_like_git_dir(self):
+        for cmd in ['git -C "$LIB" push', 'git -C "$W/lib" push', "git -C $(pwd)/../lib push",
+                    "git -C ${LIB} push", "git -C `pwd`/../lib push", "git -C ../l* push", "git -C ../li? push",
+                    "git -C ../[l]ib push", "git -C $(pwd)/../lib tag v1", "git -C ~/x -C $D push",
+                    "bash -c 'git -C \"$LIB\" push'", "sh -lc \"git -C \\$LIB push\"",
+                    "echo $(git -C $L push)", "bash <<'EOF'\ngit -C $L push\nEOF"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+
+    def test_a_plain_c_word_is_still_placed(self):
+        self.assertIsNone(self.run_in("git -C . push origin main"))
+        self.assertIsNone(self.run_in("git -C ../other push origin main", "core"))
+        self.assertEqual(self.run_in("git -C ../core push", "other"), "deny")
+        self.assertIsNone(self.run_in('git -C "../other" status'))

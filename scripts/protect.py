@@ -59,19 +59,31 @@ def hits(toks, cwd, direct, indirect):
         if direct(verb, expand(word, cwd)):
             return True
     cds, assigned = writes.moves_into(toks)
-    return writes.any_write(toks) and any(indirect(expand(w, cwd)) for w in cds + assigned)
+    return writes.any_write(toks) and any(indirect(expand(w, cwd)) for w in cds + [v for _, v in assigned])
+
+
+def substitute(word, env):
+    """The word with the variables the line itself assigned put in."""
+    for name, value in env.items():
+        word = word.replace("${%s}" % name, value).replace("$" + name, value)
+    return word
 
 
 def registry_hit(toks, cwd, code):
     """True for a write into Claude Code's sessions folder, a mv, rm or ln of that folder or of the
-    config folder itself, a cd into it or a variable naming it beside a write, or interpreter code
-    naming it."""
-    def direct(verb, path):
-        return in_sessions(path) or (verb in REMOVERS and path in claude_dirs())
-
-    def indirect(path):
-        return in_sessions(path) or any(under(path, d) for d in claude_dirs())
-    return hits(toks, cwd, direct, indirect) or any(INLINE_REGISTRY.search(c) or any(d in c for d in sessions_dirs()) for c in code)
+    config folder itself, a cd into the sessions folder or a variable naming it beside a write, a
+    relative or variable target that resolves into it, or interpreter code naming it. Naming the
+    config folder alone (`cd ~/.claude && cp x /tmp/y`) is not enough."""
+    cds, assigned = writes.moves_into(toks)
+    env = dict(assigned)
+    here = expand(substitute(cds[-1], env), cwd) if cds else cwd
+    for verb, word in writes.write_targets(toks):
+        path = expand(substitute(word, env), here)
+        if in_sessions(path) or (verb in REMOVERS and path in claude_dirs()):
+            return True
+    if writes.any_write(toks) and any(in_sessions(expand(w, cwd)) for w in cds + [v for _, v in assigned]):
+        return True
+    return any(INLINE_REGISTRY.search(c) or any(d in c for d in sessions_dirs()) for c in code)
 
 
 def crew_home_hit(toks, cwd):

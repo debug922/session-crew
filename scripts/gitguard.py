@@ -41,7 +41,8 @@ KNOWN = {"push", "tag", "commit", "status", "log", "diff", "add", "checkout", "f
          "rebase", "branch", "show", "clone", "init", "remote", "config", "worktree", "stash", "reset",
          "cherry-pick", "rev-parse", "ls-remote", "describe", "switch", "restore", "rm", "mv", "apply",
          "am", "bisect", "blame", "grep", "clean", "gc", "notes", "submodule", "archive", "revert"}
-PUSH_OR_TAG = re.compile(r"\b(?:push|tag|pushd|popd|cd)\b|!")
+PUSH_OR_TAG = re.compile(r"\b(?:push|tag|pushd|popd|cd|ssh)\b|--chdir|\benv\s+-C|\bfind\b.*-(?:exec|execdir|ok|okdir)\b"
+                         r"|[$`]")
 CONFIG_KEYS = re.compile(r"(?:alias|url|remote)\.", re.IGNORECASE)
 GIT_ENV = re.compile(r"GIT_\w+=")
 

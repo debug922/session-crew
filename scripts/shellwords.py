@@ -47,6 +47,22 @@ def _has_c(flag):
     return flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]
 
 
+def _after_value(toks, j):
+    """Where the words go on after an option's value at toks[j]: past a $( ) substitution too,
+    which the tokenizer splits (`$`, `(`, ..., `)`, then the rest of the path)."""
+    if toks[j:j + 1] and toks[j].endswith("$") and toks[j + 1:j + 2] == ["("]:
+        depth, k = 0, j + 1
+        while k < len(toks):
+            depth += {"(": 1, ")": -1}.get(toks[k], 0)
+            k += 1
+            if depth == 0:
+                break
+        if k < len(toks) and not set(toks[k]) <= set(";&|()") and toks[k].startswith(("/", ".")):
+            k += 1
+        return k
+    return j + 1
+
+
 def git_calls(toks, depth=0):
     """Yields (subcommand, args, options before it) for every git call, nested shells included."""
     for i, tok in enumerate(toks):
@@ -60,7 +76,7 @@ def git_calls(toks, depth=0):
             while j < len(toks):
                 t = toks[j]
                 if t in GIT_OPTS_WITH_VALUE:
-                    j += 2
+                    j = _after_value(toks, j + 1)
                 elif t in GIT_OPTS_ALONE or any(t.startswith(o + "=") for o in GIT_OPTS_WITH_VALUE):
                     j += 1
                 else:
@@ -107,12 +123,16 @@ def github_deletes(cmd, toks):
 
 
 def git_start_dir(opts, cwd):
-    """Where a git call runs: cwd moved by every -C; None when --git-dir or --work-tree decides."""
+    """Where a git call runs: cwd moved by every -C; None when --git-dir, --work-tree or a -C word
+    holding a variable, a substitution or a glob decides."""
     here = cwd
     it = iter(opts)
     for t in it:
         if t == "-C":
-            here = os.path.join(here, os.path.expanduser(next(it, "")))
+            word = next(it, "")
+            if any(c in word for c in "$`*?[{"):  # the shell decides where this points
+                return None
+            here = os.path.join(here, os.path.expanduser(word))
         elif t in ("--git-dir", "--work-tree") or t.startswith(("--git-dir=", "--work-tree=")):
             return None
     return here
