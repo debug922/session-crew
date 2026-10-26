@@ -133,3 +133,17 @@ def configuration(named, texts, cwd, plugin):
         if any(re.search(m, c) for c in inline_code(toks) for m in mine):
             return Verdict("ask", CONFIG_ASK)
     return None
+
+
+def git_config_edit(texts, cwd):
+    """A deny for a write verb or redirection into a git configuration file (.git/config,
+    .gitconfig): an alias or a url rewrite there would hide a push."""
+    def direct(verb, path):
+        base = os.path.basename(path)
+        return base in (".gitconfig", "gitconfig") or (base == "config" and ".git" in path.split(os.sep))
+    for toks in texts:
+        if hits(toks, cwd, direct, lambda p: direct("", os.path.join(p, "config"))):
+            return Verdict("deny", "This writes a git configuration file, where an alias or a url "
+                                   "rewrite could hide a push. Use git config, and keep its value "
+                                   "off push, tag and cd.")
+    return None

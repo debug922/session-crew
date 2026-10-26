@@ -41,16 +41,50 @@ KNOWN = {"push", "tag", "commit", "status", "log", "diff", "add", "checkout", "f
          "rebase", "branch", "show", "clone", "init", "remote", "config", "worktree", "stash", "reset",
          "cherry-pick", "rev-parse", "ls-remote", "describe", "switch", "restore", "rm", "mv", "apply",
          "am", "bisect", "blame", "grep", "clean", "gc", "notes", "submodule", "archive", "revert"}
-PUSH_OR_TAG = re.compile(r"\b(?:push|tag)\b")
+PUSH_OR_TAG = re.compile(r"\b(?:push|tag|pushd|popd|cd)\b|!")
 CONFIG_KEYS = re.compile(r"(?:alias|url|remote)\.", re.IGNORECASE)
 GIT_ENV = re.compile(r"GIT_\w+=")
 
 
-def blind(texts_toks):
-    """True when a call's place cannot be told from the words: a cd or an env prefix such as
-    GIT_DIR or GIT_WORK_TREE in any of the command's lines."""
-    return any(os.path.basename(t) in ("cd", "pushd") or GIT_ENV.match(t)
-               for toks in texts_toks for t in toks)
+def _env_moves(args):
+    """True when the words after `env` change its folder (-C, --chdir)."""
+    for a in args:
+        if a in ("-C", "--chdir") or a.startswith("--chdir=") or (a.startswith("-C") and len(a) > 2):
+            return True
+        if not a.startswith("-") and "=" not in a:
+            return False
+    return False
+
+
+def blind(lists):
+    """True when a call's place cannot be told from the words: a cd, pushd or popd, an env prefix
+    such as GIT_DIR, env -C, find -exec running git, or ssh, in any of the command's lines."""
+    for toks in lists:
+        for i, t in enumerate(toks):
+            base = os.path.basename(t)
+            rest = toks[i + 1:]
+            if base in ("cd", "pushd", "popd") or GIT_ENV.match(t):
+                return True
+            if base == "env" and _env_moves(rest):
+                return True
+            if base == "find" and any(a in ("-exec", "-execdir", "-ok", "-okdir") for a in rest) \
+                    and any(os.path.basename(a) == "git" for a in rest):
+                return True
+            if base == "ssh" and any("git" in a for a in rest):
+                return True
+    return False
+
+
+def opaque(toks):
+    """True when a program word is a variable or a substitution and push or tag stands beside it:
+    the guard cannot tell it is not git."""
+    wrapped = ("env", "nice", "sudo", "time", "exec", "command", "nohup")
+    for i, t in enumerate(toks):
+        start = i == 0 or set(toks[i - 1]) <= set(";&|(") or (
+            toks[i - 1] in wrapped or "=" in toks[i - 1] and not toks[i - 1].startswith("-"))
+        if start and t.startswith(("$", "`")) and any(a in ("push", "tag") for a in toks[i + 1:]):
+            return True
+    return False
 
 
 def place(opts, cwd, lost):
@@ -118,6 +152,9 @@ def push_verdict(args, top, table, subs):
 
 
 def git_rules(toks, cwd, table, lost, depth=0):
+    if table.active and opaque(toks):
+        return Verdict("deny", "The program here is a variable or a substitution beside push or tag: "
+                               "the guard cannot tell it is not git. Write git itself.")
     calls = list(sw.git_calls(toks))
     subs = [c[0] for c in calls]
     for sub, args, opts in calls:
@@ -128,9 +165,11 @@ def git_rules(toks, cwd, table, lost, depth=0):
         start = sw.git_start_dir(opts, cwd) or cwd
         sub, args = resolve_alias(sub, args, start)
         if sub == "!":
-            inner = git_rules(sw.tokens(args[0]), cwd, table, lost, depth + 1) if depth < 3 else None
-            if inner:
-                return inner
+            lists = sw.all_lists(args[0]) if depth < 3 else []
+            for inner in lists:
+                found = git_rules(inner, cwd, table, lost or blind(lists), depth + 1)
+                if found:
+                    return found
             continue
         top = place(opts, cwd, lost)
         if sub == "push":

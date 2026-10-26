@@ -144,3 +144,59 @@ class NestedAndAliases(GuardCase):
         for cmd in ["bash -lc 'git push'", "echo $(git push)", "git -c alias.p=push p",
                     "GIT_DIR=x git push"]:
             self.assertIsNone(self.run_in(cmd), cmd)
+
+
+class Blind(GuardCase):
+    """A push the guard cannot place is refused: a cd, popd, env -C and the like anywhere in the
+    line (nested texts included) make it so, and so does a program the guard cannot read."""
+
+    def run_in(self, cmd, repo="other"):
+        return self.bash(cmd, cwd=os.path.join(self.work, repo))
+
+    def test_a_cd_in_any_nested_text_makes_the_push_unplaceable(self):
+        for cmd in ["bash -c 'cd ../core && git push'", "sh -lc \"pushd ../core; git push\"",
+                    "zsh -c 'popd; git push'", "dash -ec 'cd ../core && git push'",
+                    "su -c 'cd ../core && git push' someone", "eval 'cd ../core && git push'",
+                    "eval 'cd ../core'; git push", "bash <<'EOF'\ncd ../core\nEOF\ngit push",
+                    "echo $(cd ../core); git push", "echo `cd ../core`; git push",
+                    "sh -c 'bash -c \"cd ../core && git push\"'", "popd; git push"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+        self.assertIsNone(self.run_in("bash -c 'git push'"))
+        self.assertIsNone(self.run_in("bash -c 'echo hi'; git push"))
+
+    def test_an_alias_that_runs_a_shell_with_a_cd_is_blind_too(self):
+        self.git("other", "config", "alias.go", "!cd ../core && git push")
+        self.assertEqual(self.run_in("git go"), "deny")
+
+    def test_env_chdir_find_exec_and_ssh_make_it_unplaceable(self):
+        for cmd in ["env -C ../core git push", "env --chdir=../core git push", "env --chdir ../core git push",
+                    "env -C../core git push", "find . -maxdepth 1 -exec git push {} \;",
+                    "find .. -execdir git push \;", "ssh localhost 'cd /x && git push'", "ssh host \"git push\"",
+                    "ssh -p 22 host 'git -C core push'"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+        for cmd in ["env FOO=1 git status", "find . -name x", "find . -exec ls {} \;", "ssh host 'ls'",
+                    "env -i git status"]:
+            self.assertIsNone(self.run_in(cmd), cmd)
+
+    def test_a_variable_or_a_substitution_as_the_program_word_beside_push_or_tag_is_refused(self):
+        for cmd in ["$G push", "${G} push origin", "\"$G\" tag v1", "G=git; $G push", "$(which git) push",
+                    "`which git` push origin main", "true && $GIT push", "$G -C ../core push"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+        for cmd in ["$EDITOR file", "$G status", "echo $G push", "$G log"]:
+            self.assertIsNone(self.run_in(cmd), cmd)
+
+    def test_writing_an_alias_is_refused_unless_its_value_names_nothing_that_matters(self):
+        for cmd in ["git config alias.x 'cd ..'", "git config alias.x '!ls'", "git config alias.x push",
+                    "git config alias.x 'pushd ..'", "git config --global alias.x 'tag -d'",
+                    "git config alias.x=push", "git -c alias.x=status x"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+        for cmd in ["git config alias.st status", "git config alias.lg 'log --oneline'", "git config user.name x"]:
+            self.assertIsNone(self.run_in(cmd), cmd)
+
+    def test_editing_the_repositorys_config_file_by_a_write_verb_is_refused(self):
+        for cmd in ["echo '[alias]' >> .git/config", "sed -i '' 's/a/b/' .git/config", "cp x ../core/.git/config",
+                    "tee -a .git/config", "echo x >> ~/.gitconfig", "mv x ../core/.git/config",
+                    "cd .git && echo x >> config"]:
+            self.assertEqual(self.run_in(cmd), "deny", cmd)
+        for cmd in ["cat .git/config", "grep url .git/config", "cp .git/config /tmp/o", "ls .git"]:
+            self.assertIsNone(self.run_in(cmd), cmd)

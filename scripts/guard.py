@@ -123,6 +123,10 @@ def check_bash(event):
     if pcwd is None:
         return None
     table = repos.read(pcwd)
+    if table.active:
+        found = protect.git_config_edit(texts, cwd)
+        if found:
+            return found
     lost = gitguard.blind(texts)
     for found in (Verdict("ask", "This deletes something on GitHub, which goes only on the user's "
                                  "explicit request. It runs only if he confirms.")
