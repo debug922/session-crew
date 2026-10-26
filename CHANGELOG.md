@@ -17,6 +17,8 @@
   process's folder.
 - The guard holds any line naming the plugin's scripts to exact shapes, guards the whole crew home,
   resolves where a `git push` goes, and looks inside shells, heredocs, substitutions and aliases.
+- The guard refuses any write into Claude Code's registry of sessions; the door trusts a registry file
+  only when its procStart matches the live process.
 - Fix: a session id with two registry files takes the one whose pid is alive, then the newest.
 
 ## 0.1.0 (unreleased)

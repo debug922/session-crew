@@ -120,6 +120,12 @@ session that is not among the repository's pushers, finds the project from the p
 folder, and refuses a public repository while a night is on. Only two things are the guard's alone:
 that an agent never opens the door, and the ask before a public push by day.
 
+All of these checks rest on Claude Code's registry of sessions (`~/.claude/sessions`), which only
+Claude Code writes. The door reads it through the process ancestry and trusts a file only when its
+`procStart` matches the live process, so a stale file under a reused pid never counts; the guard
+refuses (a deny, never an ask) any write into that folder, or a move of it or of the config folder,
+from a Bash line or a file tool, in every folder, configured or not.
+
 The guard (PreToolUse, for Bash and for the file tools) holds the rest, for the project of the
 event's folder:
 
@@ -129,7 +135,7 @@ event's folder:
   allowed shapes (the door lines, `config show|discover|apply`, and v1's own `handoff`, `migrate`,
   `recover`, `size` and `hook` forms), alone on its line by the plugin's own path, with no env prefix, `bash -c`, `$(...)` or extra
   words; anything else is refused and the refusal lists the shapes. A `crew.py` that is only an argument of git, grep or an editor is not run, so
-  working on a copy of this repository is not held up; a plain read (`cat`, `grep`, `ls`) of the plugin is free. The door's line also needs a session the table names as a pusher,
+  working on a copy of this repository is not held up; a plain read (`cat`, `grep`, `ls`) of the plugin is free. A `crew.py` that is not the installed one may run v1's own shapes and `config show|discover`, never `push`, `tag` or `config apply`; if you load the plugin from a working checkout (`--plugin-dir`), commands naming that checkout are held to the shapes, since it is the plugin's folder for the guard. The door's line also needs a session the table names as a pusher,
   never an agent; a public repository asks you;
 - in a project with a table, `git push` passes only when the guard places the repository (no `cd`,
   env prefix, `--git-dir` or `--work-tree`), it is not in the table, and every place the push goes

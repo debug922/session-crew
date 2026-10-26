@@ -37,8 +37,7 @@ class Shapes(GuardCase):
             "echo $(%s)" % self.crew("migrate"), "echo `%s`" % self.crew("migrate"),
             self.crew("migrate") + " && ls", self.crew("migrate") + " ; rm x", self.crew("migrate") + " | cat",
             self.crew("migrate") + " > /tmp/out", self.crew("size") + " 2>&1", "cd /tmp && " + self.crew("migrate"),
-            "python3 -I scripts/crew.py migrate", "python3 -I ./crew.py migrate",
-            "python3 -I /tmp/copy/crew.py migrate", "python3 crew.py migrate",
+            "python3 crew.py migrate",
             "python3 -I %s/door.py" % scripts, "python3 -I %s/shapes.py" % scripts,
             "python3 -I %s/cr*.py migrate" % scripts, "python3 -I %s/s*/c?ew.py migrate" % scripts,
             "python3 -I %s/scripts/[c]rew.py migrate" % guard.ROOT, "python3 -I %s/*/crew.py" % guard.ROOT,
@@ -242,3 +241,38 @@ class CrewHomeRefined(GuardCase):
         for cmd in ["cp x %s" % p, "cp -t %s x" % self.slug, "install x %s" % p, "rsync x %s" % p,
                     "tee %s" % p, "cat x | tee -a %s" % p, "mv x %s" % p, "dd if=x of=%s" % p]:
             self.assertEqual(self.bash(cmd), "ask", cmd)
+
+
+class NotTheInstalledOne(GuardCase):
+    """Another crew.py (a working checkout, a copy) may run v1's shapes and config show|discover,
+    never the door or config apply: those only from the installed path."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = os.path.join(self.work, "checkout", "scripts", "crew.py")
+
+    def line(self, rest, path=None):
+        return "python3 -I %s %s" % (path or self.other, rest)
+
+    def test_v1_and_config_reads_run_from_any_crew_py(self):
+        for rest in ["migrate", "migrate alpha --cwd /d", "recover", "size", "handoff status", "hook size",
+                     "config show", "config discover --cwd /d", HANDOFF]:
+            for path in (self.other, "scripts/crew.py", "./crew.py", "/tmp/copy/crew.py"):
+                self.assertIsNone(self.bash(self.line(rest, path)), (rest, path))
+
+    def test_the_door_and_apply_run_only_from_the_installed_path(self):
+        for rest in ["push lib", "tag core v0.1.0", "config apply d.json", "config apply --cwd /d d.json"]:
+            for path in (self.other, "scripts/crew.py", "/tmp/copy/crew.py"):
+                self.assertEqual(self.bash(self.line(rest, path)), "deny", (rest, path))
+        self.assertIsNone(self.bash(self.line("push lib", guard.CREW)))
+
+    def test_a_script_not_called_crew_py_is_outside_the_shape_rule(self):
+        for path in ("/tmp/copy/door.py", "/tmp/copy/crew.py.bak", "/tmp/x/main.py"):
+            self.assertIsNone(self.bash(self.line("migrate", path)), path)
+
+    def test_apply_takes_its_cwd_before_or_after_the_draft(self):
+        for rest in ["config apply d.json --cwd /d", "config apply --cwd /d d.json", "config apply d.json"]:
+            self.assertEqual(self.bash(self.line(rest, guard.CREW)), "ask", rest)
+        for rest in ["config apply --cwd d.json", "config apply --cwd /d", "config apply a.json b.json",
+                     "config apply --cwd /d d.json --cwd /e", "config apply d.json --name x"]:
+            self.assertEqual(self.bash(self.line(rest, guard.CREW)), "deny", rest)

@@ -54,6 +54,17 @@ def _with_one_positional(args):
         SAFE.fullmatch(a) for a in args if a not in FLAGS)
 
 
+def _apply_ok(args):
+    """DRAFT, with an optional --cwd DIR before or after it."""
+    if len(args) == 1:
+        return bool(SAFE.fullmatch(args[0])) and args[0] != "--cwd"
+    if len(args) == 3 and args[1] == "--cwd":
+        return bool(SAFE.fullmatch(args[0])) and args[0] != "--cwd" and bool(SAFE.fullmatch(args[2]))
+    if len(args) == 3 and args[0] == "--cwd":
+        return bool(SAFE.fullmatch(args[1])) and bool(SAFE.fullmatch(args[2])) and args[2] != "--cwd"
+    return False
+
+
 def _sub(sub, args, heredoc):
     if sub == "push":
         return Shape("door", args[0]) if len(args) == 1 and REPO.fullmatch(args[0]) and not heredoc else None
@@ -64,8 +75,8 @@ def _sub(sub, args, heredoc):
         return None
     if sub == "config" and args[:1] in (["show"], ["discover"]):
         return Shape("safe") if args[1:] == [] or (args[1] == "--cwd" and _flags_ok(args[1:])) else None
-    if sub == "config" and args[:1] == ["apply"] and len(args) >= 2 and SAFE.fullmatch(args[1]):
-        return Shape("apply") if args[2:] == [] or (args[2] == "--cwd" and _flags_ok(args[2:])) else None
+    if sub == "config" and args[:1] == ["apply"]:
+        return Shape("apply") if _apply_ok(args[1:]) else None
     if sub == "handoff" and args[:1] in (["save"], ["status"]):
         return Shape("safe") if _flags_ok(args[1:]) else None
     if sub in ("migrate", "recover", "size"):
@@ -89,11 +100,16 @@ def classify(cmd, paths):
         toks = shlex.split(first)
     except ValueError:
         return None
-    if len(toks) < 4 or toks[:2] != ["python3", "-I"] or toks[2] not in paths:
+    if len(toks) < 4 or toks[:2] != ["python3", "-I"]:
         return None
-    if any(not SAFE.fullmatch(a) for a in toks[3:]):
+    installed = toks[2] in paths
+    if not installed and os.path.basename(toks[2]) != "crew.py":
         return None
-    return _sub(toks[3], toks[4:], heredoc)
+    if not (installed or SAFE.fullmatch(toks[2])) or any(not SAFE.fullmatch(a) for a in toks[3:]):
+        return None
+    shape = _sub(toks[3], toks[4:], heredoc)
+    # Another crew.py (a checkout, a copy) runs v1's shapes and config reads, never the door or apply.
+    return shape if shape and (installed or shape.kind == "safe") else None
 
 
 def _under(path, folders):
