@@ -170,11 +170,11 @@ class Blind(GuardCase):
 
     def test_env_chdir_find_exec_and_ssh_make_it_unplaceable(self):
         for cmd in ["env -C ../core git push", "env --chdir=../core git push", "env --chdir ../core git push",
-                    "env -C../core git push", "find . -maxdepth 1 -exec git push {} \;",
-                    "find .. -execdir git push \;", "ssh localhost 'cd /x && git push'", "ssh host \"git push\"",
+                    "env -C../core git push", "find . -maxdepth 1 -exec git push {} \\;",
+                    "find .. -execdir git push \\;", "ssh localhost 'cd /x && git push'", "ssh host \"git push\"",
                     "ssh -p 22 host 'git -C core push'"]:
             self.assertEqual(self.run_in(cmd), "deny", cmd)
-        for cmd in ["env FOO=1 git status", "find . -name x", "find . -exec ls {} \;", "ssh host 'ls'",
+        for cmd in ["env FOO=1 git status", "find . -name x", "find . -exec ls {} \\;", "ssh host 'ls'",
                     "env -i git status"]:
             self.assertIsNone(self.run_in(cmd), cmd)
 
