@@ -64,6 +64,15 @@ compaction summary and the text of the messages after it.
 The handover has four sections: `## Work under way`, `## Last requests and decisions` (your own
 words, quoted), `## What remains`, `## Where things are`. `handoff save` refuses a body missing one.
 
+**Keep transcripts longer than a tab stays open.** After `/clear` the tab's process keeps the old
+conversation and writes its title back when it exits. If Claude Code's cleanup (`cleanupPeriodDays`
+in `~/.claude/settings.json`, default 30) deleted it in the meantime, it comes back as a file of
+about 1 KB with the session's name and no messages: the session list shows it next to the real one,
+and opening it starts an empty conversation. Do not lower the retention below how long you keep
+tabs open; a VS Code restart closes them all at once. The real session is the large file:
+`ls -lt ~/.claude/projects/<slug>/` shows the sizes. Details: [docs/design.md](docs/design.md),
+fact 9.
+
 ## Configuration
 
 Optional, in `~/.session-crew/<slug>/project.json`; a missing or partial file gives the defaults.

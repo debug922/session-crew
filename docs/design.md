@@ -52,6 +52,16 @@ The same `SKILL.md` files serve GitHub Copilot in VS Code (section 9).
    plugin loads in place.
 8. **`python3 -I` drops the script's folder from `sys.path`** (it implies `-P`): an entry script
    inserts its own folder before importing its siblings.
+9. **A process keeps every conversation it held** (seen 2026-11-07, Claude Code 2.1.319): when it
+   exits it writes back the `custom-title`, `agent-name`, `mode` and `cost-state` records of the
+   conversations it left with `/clear`, not only of the current one. Claude Code deletes a
+   transcript after `cleanupPeriodDays` without a write (default 30). A tab kept open longer than
+   that after a `/clear` loses the old transcript, and at its exit the file comes back as about
+   1 KB of those records with no messages: the VS Code extension lists it under the session's name
+   with the exit date, and opening it starts an empty conversation ("Nothing to resume" in its
+   log). Measured: a VS Code restart for an update left four such files from tabs open for 17 to
+   21 days, with a retention of 14. The real transcripts were intact. Hence the note on retention
+   in the README: keep `cleanupPeriodDays` longer than a tab stays open.
 
 ## 3. The flow
 

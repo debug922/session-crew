@@ -20,6 +20,9 @@
 - The guard refuses any write into Claude Code's registry of sessions; the door trusts a registry file
   only when its procStart matches the live process.
 - Fix: a session id with two registry files takes the one whose pid is alive, then the newest.
+- Docs: a tab keeps the conversations it left with `/clear` and writes their title back when it
+  exits, so a retention shorter than a tab's life brings them back as empty files under the
+  session's name (README, design fact 9).
 
 ## 0.1.0 (unreleased)
 
