@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (2026-11-11)
+## v0.2.0 (2026-11-11)
 
 - `/setup`: the project's configuration made and changed in chat, in rounds of options
   (`crew.py config show|discover|apply`); `apply` validates the draft, prints the changes, keeps
@@ -24,7 +24,7 @@
   exits, so a retention shorter than a tab's life brings them back as empty files under the
   session's name (README, design fact 9).
 
-## 0.1.0 (2026-10-22)
+## v0.1.0 (2026-10-22)
 
 - Size hook: warns the session, then the user, when a transcript passes `warn_mb` and
   `tell_user_mb`; reminds the user of a pending handoff.
