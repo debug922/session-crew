@@ -52,6 +52,10 @@ class Repo(CrewCase):
             bare = os.path.join(self.root, name + ".git")
             sh(self.root, "git", "init", "-q", "--bare", "-b", "main", bare)
             sh(self.root, "git", "clone", "-q", bare, name)
+            # The door's own git calls make the annotated tag: like a real clone, the repository
+            # carries its identity, since a CI runner has none of its own.
+            sh(os.path.join(self.root, name), "git", "config", "user.name", "t")
+            sh(os.path.join(self.root, name), "git", "config", "user.email", "t@t")
             self.commit(name, file, text, "Start")
             self.git(name, "push", "-q", "origin", "main")
             if name == "core":
